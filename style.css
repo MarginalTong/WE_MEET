@@ -1,0 +1,148 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: #f7f7fb;
+  color: #111827;
+}
+
+.container {
+  max-width: 960px;
+  margin: 24px auto;
+  padding: 0 16px 24px;
+}
+
+h1 {
+  margin-bottom: 8px;
+}
+
+.desc {
+  margin-top: 0;
+  color: #4b5563;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 14px;
+}
+
+label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+input[type="text"],
+textarea {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+}
+
+input[type="file"] {
+  margin-bottom: 12px;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+button {
+  border: 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+}
+
+button:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.status {
+  margin-top: 10px;
+  color: #4b5563;
+}
+
+.table-wrap {
+  overflow: auto;
+  max-height: 560px;
+}
+
+.schedule-table {
+  min-width: 780px;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: #fff;
+}
+
+.schedule-table th,
+.schedule-table td {
+  border: 1px solid #eef0f4;
+  padding: 10px 8px;
+  text-align: center;
+}
+
+.schedule-table thead th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  z-index: 2;
+}
+
+.time-col {
+  min-width: 92px;
+  font-weight: 600;
+  color: #334155;
+  background: #f8fafc;
+}
+
+.state-pill {
+  display: inline-block;
+  min-width: 86px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: lowercase;
+}
+
+.state-pill.available {
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+.state-pill.busy {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border: 1px solid #e5e7eb;
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+th {
+  background: #f3f4f6;
+}

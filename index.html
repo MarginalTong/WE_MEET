@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>课表空闲检测（Apple 风）</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>课表空闲检测（Apple 风）</h1>
+      <p class="desc">
+        上传课表截图后，自动输出每个时段的 <strong>busy / available</strong>。
+      </p>
+
+      <section class="card">
+        <h2>1) Supabase 配置</h2>
+        <label for="supabaseUrl">Supabase URL</label>
+        <input id="supabaseUrl" type="text" placeholder="https://xxx.supabase.co" />
+        <label for="supabaseAnonKey">Supabase Anon Key</label>
+        <input id="supabaseAnonKey" type="text" placeholder="eyJhbGciOi..." />
+        <label for="aiApiUrl">AI 代理接口地址</label>
+        <input id="aiApiUrl" type="text" placeholder="http://localhost:8787/extract" />
+        <div class="actions">
+          <button id="saveConfigBtn">保存配置</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>2) 登录与共享课表</h2>
+        <label for="emailInput">邮箱登录（Magic Link）</label>
+        <input id="emailInput" type="email" placeholder="you@example.com" />
+        <div class="actions">
+          <button id="sendMagicBtn">发送登录链接</button>
+          <button id="signOutBtn">退出登录</button>
+        </div>
+        <p id="authStatus" class="status">未登录</p>
+        <label for="shareCodeInput">课表分享码</label>
+        <input id="shareCodeInput" type="text" placeholder="输入分享码加入课表" />
+        <div class="actions">
+          <button id="createTimetableBtn">创建新课表</button>
+          <button id="joinTimetableBtn">加入课表</button>
+        </div>
+        <p id="timetableStatus" class="status">未选择课表</p>
+      </section>
+
+      <section class="card">
+        <h2>3) 上传图片</h2>
+        <input id="imageInput" type="file" accept="image/*" />
+        <div class="actions">
+          <button id="recognizeBtn">识别并生成课表</button>
+          <button id="downloadBtn" disabled>下载 CSV</button>
+        </div>
+        <p id="status" class="status">等待上传图片...</p>
+      </section>
+
+      <section class="card">
+        <h2>4) 识别结果</h2>
+        <textarea
+          id="rawText"
+          rows="7"
+          placeholder="识别文本会显示在这里"
+        ></textarea>
+      </section>
+
+      <section class="card">
+        <h2>5) 周视图（只显示状态）</h2>
+        <div id="tableWrap" class="table-wrap"></div>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
