@@ -21,7 +21,9 @@ const timetableStatus = document.getElementById("timetableStatus");
 const createLocalScheduleBtn = document.getElementById("createLocalScheduleBtn");
 const googleSignInBtn = document.getElementById("googleSignInBtn");
 
+/** Canonical weekday keys (must match DB / AI output). */
 const DAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+const DAY_HEADERS_EN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MAX_IMAGE_BYTES = 250 * 1024;
 const HALF_HOUR_SLOTS = Array.from({ length: 48 }, (_, idx) => {
   const startMin = idx * 30;
@@ -33,7 +35,7 @@ const HALF_HOUR_SLOTS = Array.from({ length: 48 }, (_, idx) => {
   return `${startHour}:${startMinute}-${endHour}:${endMinute}`;
 });
 
-/** 标记当前选中为仅本机日程（不写入 Supabase） */
+/** Local-only schedule (not synced to Supabase). */
 const LOCAL_SCHEDULE_ID = "__local__";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -44,7 +46,7 @@ function normalizeStoredTimetableId(raw) {
   return UUID_RE.test(s) ? s : "";
 }
 
-/** 仅合法 UUID 字符串可用于 PostgREST，禁止把对象拼进 id=eq....（否则会 400） */
+/** Only valid UUID strings for PostgREST filters (avoid id=eq.[object Object] → 400). */
 function coerceUuidString(value) {
   if (value == null || typeof value !== "string") return null;
   const t = value.trim();
@@ -71,7 +73,7 @@ const STORAGE_KEYS = {
   localEvents: "we_meet_local_events_v1",
 };
 
-/** 项目默认连接（首次打开自动使用；本地 storage 可覆盖） */
+/** Default project connection (overridable via localStorage). */
 const DEFAULT_APP_CONFIG = {
   supabaseUrl: "https://ffoigzshtkstosjbquhp.supabase.co",
   supabaseAnonKey:
@@ -146,12 +148,12 @@ function readFileAsBase64(file) {
       const dataUrl = String(reader.result || "");
       const base64 = dataUrl.split(",")[1];
       if (!base64) {
-        reject(new Error("图片读取失败"));
+        reject(new Error("Failed to read image"));
         return;
       }
       resolve(base64);
     };
-    reader.onerror = () => reject(new Error("图片读取失败"));
+    reader.onerror = () => reject(new Error("Failed to read image"));
     reader.readAsDataURL(file);
   });
 }
@@ -166,7 +168,7 @@ function loadImageFromFile(file) {
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error("图片解码失败"));
+      reject(new Error("Failed to decode image"));
     };
     img.src = url;
   });
@@ -177,7 +179,7 @@ function canvasToBlob(canvas, quality) {
     canvas.toBlob(
       (blob) => {
         if (!blob) {
-          reject(new Error("图片压缩失败"));
+          reject(new Error("Image compression failed"));
           return;
         }
         resolve(blob);
@@ -196,7 +198,7 @@ async function compressImageUnderLimit(file, maxBytes = MAX_IMAGE_BYTES) {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
   if (!ctx) {
-    throw new Error("浏览器不支持图片压缩");
+    throw new Error("Image compression is not supported in this browser");
   }
 
   let scale = 1;
@@ -217,7 +219,7 @@ async function compressImageUnderLimit(file, maxBytes = MAX_IMAGE_BYTES) {
     else scale *= 0.86;
   }
 
-  if (!bestBlob) throw new Error("图片压缩失败");
+  if (!bestBlob) throw new Error("Image compression failed");
   return new File([bestBlob], "compressed.jpg", { type: "image/jpeg" });
 }
 
@@ -266,7 +268,7 @@ function sanitizeEvents(rawEvents) {
 }
 
 function buildRowsFromEvents(events) {
-  const rows = [["时间段", ...DAYS]];
+  const rows = [["Time slot", ...DAY_HEADERS_EN]];
   const grid = HALF_HOUR_SLOTS.map(() => Object.fromEntries(DAYS.map((d) => [d, "available"])));
   events.forEach((event) => {
     HALF_HOUR_SLOTS.forEach((_, idx) => {
@@ -286,7 +288,7 @@ function buildRowsFromEvents(events) {
 function renderTable(rows) {
   tableWrap.innerHTML = "";
   if (!rows.length) {
-    tableWrap.innerHTML = "<p>没有可展示的数据</p>";
+    tableWrap.innerHTML = "<p>No data to display</p>";
     downloadBtn.disabled = true;
     return;
   }
@@ -397,8 +399,8 @@ function firstUuidStringIn(value, depth) {
 }
 
 /**
- * RPC create_timetable / join_timetable_by_code 返回 { id, share_code }（json）。
- * PostgREST / 客户端有时会把 id 包成嵌套对象；若当字符串用会出现 ID: [object Object]。
+ * RPC create_timetable / join_timetable_by_code returns { id, share_code } (json).
+ * Some clients nest id; coerce to a UUID string before use.
  */
 function parseTimetableRpcPayload(data) {
   let v = data;
@@ -481,7 +483,7 @@ async function persistEvents(cleanedEvents) {
   }
   const tid = getValidCloudTimetableId();
   if (!supabase || !tid) {
-    throw new Error("请先登录并加入云端日程表");
+    throw new Error("Sign in and select a cloud timetable first");
   }
   if (!cleanedEvents.length) {
     return { merged: 0, skipped: 0 };
@@ -528,7 +530,7 @@ async function persistEvents(cleanedEvents) {
 
 async function recognizeWithProxy(file) {
   const apiUrl = aiApiUrlInput.value.trim();
-  if (!apiUrl) throw new Error("请先配置 AI 代理接口地址");
+  if (!apiUrl) throw new Error("Configure the AI proxy URL first");
   const base64Data = await readFileAsBase64(file);
   const response = await fetch(apiUrl, {
     method: "POST",
@@ -540,7 +542,7 @@ async function recognizeWithProxy(file) {
   });
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`AI 代理请求失败：${response.status} ${errText}`);
+    throw new Error(`AI proxy request failed: ${response.status} ${errText}`);
   }
   return response.json();
 }
@@ -548,24 +550,24 @@ async function recognizeWithProxy(file) {
 async function recognizeImage() {
   const originalFile = imageInput.files?.[0];
   if (!originalFile) {
-    setStatus("请先选择图片文件", true);
+    setStatus("Choose an image file first", true);
     return;
   }
   if (isLocalSchedule()) {
     /* ok */
   } else if (!getValidCloudTimetableId()) {
-    setStatus("请先点「创建本机日程」或登录后创建/加入云端日程表", true);
+    setStatus('Create a local schedule or sign in and create/join a cloud timetable', true);
     return;
   }
 
   recognizeBtn.disabled = true;
   downloadBtn.disabled = true;
-  setStatus("正在识别中，请稍候...");
+  setStatus("Recognizing, please wait…");
 
   try {
-    setStatus("正在压缩图片到 250KB 以下...");
+    setStatus("Compressing image to under 250KB…");
     const file = await compressImageUnderLimit(originalFile);
-    setStatus(`正在识别中（图片大小 ${(file.size / 1024).toFixed(1)}KB）...`);
+    setStatus(`Recognizing (image ${(file.size / 1024).toFixed(1)} KB)…`);
     const payload = await recognizeWithProxy(file);
     const rawEvents = Array.isArray(payload?.events) ? payload.events : [];
     const cleanedEvents = sanitizeEvents(rawEvents);
@@ -581,20 +583,20 @@ async function recognizeImage() {
     const { merged, skipped } = await persistEvents(cleanedEvents);
     await loadEventsAndRender();
     const slotCount = Math.max(currentRows.length - 1, 0);
-    const scope = isLocalSchedule() ? "本机日程" : "云端共享日程表";
+    const scope = isLocalSchedule() ? "local schedule" : "shared cloud timetable";
     if (merged === 0 && cleanedEvents.length > 0) {
       setStatus(
-        `识别完成：本次 ${cleanedEvents.length} 条与已有日程重复，未新增；当前${scope}共 ${slotCount} 个时段行`
+        `Done: all ${cleanedEvents.length} events were duplicates; ${slotCount} time rows in this ${scope}`
       );
     } else if (merged === 0 && cleanedEvents.length === 0) {
-      setStatus(`未识别到新活动，日程未变；当前${scope}共 ${slotCount} 个时段行`);
+      setStatus(`No new events found; ${slotCount} time rows in this ${scope}`);
     } else {
       setStatus(
-        `识别完成：新增 ${merged} 条活动${skipped ? `，跳过重复 ${skipped} 条` : ""}；已合并进${scope}，共 ${slotCount} 个时段行`
+        `Done: added ${merged} event(s)${skipped ? `, skipped ${skipped} duplicate(s)` : ""}; merged into ${scope}, ${slotCount} time rows`
       );
     }
   } catch (err) {
-    setStatus(err.message || "识别失败", true);
+    setStatus(err.message || "Recognition failed", true);
   } finally {
     recognizeBtn.disabled = false;
   }
@@ -629,7 +631,7 @@ async function initSupabase() {
   saveConfig();
   if (currentTimetableId === LOCAL_SCHEDULE_ID) {
     setTimetableStatus(
-      "当前为仅本机日程，数据仅保存在本浏览器，无法与他人共享"
+      "Local-only schedule: data stays in this browser and is not shared."
     );
     await loadEventsAndRender();
   }
@@ -637,8 +639,8 @@ async function initSupabase() {
   const url = localStorage.getItem(STORAGE_KEYS.supabaseUrl) || "";
   const anon = localStorage.getItem(STORAGE_KEYS.supabaseAnon) || "";
   if (!url || !anon) {
-    setAuthStatus("请先填写 Supabase URL 和 Anon Key（本机日程可不依赖登录）", true);
-    setStatus("保存失败：请填齐 URL 和 Anon Key", true);
+    setAuthStatus("Enter Supabase URL and anon key (optional for local-only mode)", true);
+    setStatus("Could not save: URL and anon key are required", true);
     updateSharingUi();
     return false;
   }
@@ -650,22 +652,22 @@ async function initSupabase() {
   const { data, error } = await supabase.auth.getSession();
   if (error) {
     setAuthStatus(error.message, true);
-    setStatus(`Supabase 连接失败：${error.message}`, true);
+    setStatus(`Supabase connection failed: ${error.message}`, true);
     updateSharingUi();
     return false;
   }
   currentUser = data.session?.user || null;
   setAuthStatus(
     currentUser
-      ? `已登录：${currentUser.email || currentUser.user_metadata?.full_name || "用户"}`
-      : "未登录（可本机日程 / 邮箱或 Google 登录）"
+      ? `Signed in: ${currentUser.email || currentUser.user_metadata?.full_name || "User"}`
+      : "Signed out (local schedule / email or Google sign-in)"
   );
   const { data: authData } = supabase.auth.onAuthStateChange((_event, session) => {
     currentUser = session?.user || null;
     setAuthStatus(
       currentUser
-        ? `已登录：${currentUser.email || currentUser.user_metadata?.full_name || "用户"}`
-        : "未登录（可本机日程 / 邮箱或 Google 登录）"
+        ? `Signed in: ${currentUser.email || currentUser.user_metadata?.full_name || "User"}`
+        : "Signed out (local schedule / email or Google sign-in)"
     );
     updateSharingUi();
   });
@@ -674,7 +676,7 @@ async function initSupabase() {
   clearInvalidCloudTimetableId();
   const cloudId = getValidCloudTimetableId();
   if (cloudId) {
-    setTimetableStatus(`当前云端日程表 ID：${cloudId}`);
+    setTimetableStatus(`Current cloud timetable ID: ${cloudId}`);
     await loadEventsAndRender();
     setupRealtime();
   }
@@ -689,7 +691,7 @@ async function sendMagicLink() {
   if (!supabase) return;
   const email = emailInput.value.trim();
   if (!email) {
-    setAuthStatus("请填写邮箱", true);
+    setAuthStatus("Enter your email", true);
     return;
   }
   const redirectTo = `${window.location.origin}${window.location.pathname}`;
@@ -703,7 +705,7 @@ async function sendMagicLink() {
     setAuthStatus(error.message, true);
     return;
   }
-  setAuthStatus("登录链接已发送，请查收邮箱（请用最新一封，几分钟内点开，且只点一次）");
+  setAuthStatus("Magic link sent. Check your inbox and open the latest email once, within a few minutes.");
 }
 
 async function signOut() {
@@ -719,10 +721,10 @@ async function signOut() {
   }
   if (isLocalSchedule()) {
     setTimetableStatus(
-      "当前为仅本机日程（未登录），数据仍保存在本浏览器"
+      "Local-only schedule (signed out); data remains in this browser."
     );
   } else {
-    setTimetableStatus("未选择云端日程表");
+    setTimetableStatus("No cloud timetable selected");
   }
   await loadEventsAndRender();
   updateSharingUi();
@@ -737,11 +739,11 @@ function createLocalSchedule() {
   localStorage.setItem(STORAGE_KEYS.timetableId, LOCAL_SCHEDULE_ID);
   saveLocalEvents([]);
   setTimetableStatus(
-    "当前为仅本机日程，数据只保存在此浏览器；登录后可创建云端日程以共享"
+    "Local-only schedule: data stays in this browser. Sign in to use a shared cloud timetable."
   );
   loadEventsAndRender();
   updateSharingUi();
-  setStatus("已创建本机日程，可上传图片识别");
+  setStatus("Local schedule created — you can upload an image to recognize");
 }
 
 async function signInWithGoogle() {
@@ -761,11 +763,11 @@ async function signInWithGoogle() {
 
 async function createTimetable() {
   if (!supabase || !currentUser) {
-    setTimetableStatus("请先登录", true);
+    setTimetableStatus("Please sign in first", true);
     return;
   }
   const { data, error } = await supabase.rpc("create_timetable", {
-    p_name: `日程-${new Date().toLocaleDateString()}`,
+    p_name: `Schedule-${new Date().toLocaleDateString("en-US")}`,
   });
   if (error) {
     setTimetableStatus(error.message, true);
@@ -774,14 +776,14 @@ async function createTimetable() {
   const parsed = parseTimetableRpcPayload(data);
   const id = coerceUuidString(parsed.id);
   if (!id) {
-    setTimetableStatus("创建日程表返回数据无效", true);
+    setTimetableStatus("Invalid response from create timetable", true);
     return;
   }
   currentTimetableId = id;
   localStorage.setItem(STORAGE_KEYS.timetableId, currentTimetableId);
   const shareCode = parsed.shareCode || (await getTimetableShareCode(id));
   setTimetableStatus(
-    `已创建日程表，分享码：${shareCode || "获取失败"}，ID：${currentTimetableId}`
+    `Timetable created — share code: ${shareCode || "unavailable"}, ID: ${currentTimetableId}`
   );
   await loadEventsAndRender();
   setupRealtime();
@@ -790,12 +792,12 @@ async function createTimetable() {
 
 async function joinTimetable() {
   if (!supabase || !currentUser) {
-    setTimetableStatus("请先登录", true);
+    setTimetableStatus("Please sign in first", true);
     return;
   }
   const code = shareCodeInput.value.trim();
   if (!code) {
-    setTimetableStatus("请输入分享码", true);
+    setTimetableStatus("Enter a share code", true);
     return;
   }
   const { data, error } = await supabase.rpc("join_timetable_by_code", { p_share_code: code });
@@ -806,13 +808,13 @@ async function joinTimetable() {
   const parsed = parseTimetableRpcPayload(data);
   const id = coerceUuidString(parsed.id);
   if (!id) {
-    setTimetableStatus("加入日程表返回数据无效", true);
+    setTimetableStatus("Invalid response from join timetable", true);
     return;
   }
   currentTimetableId = id;
   localStorage.setItem(STORAGE_KEYS.timetableId, currentTimetableId);
   const shareCode = parsed.shareCode || (await getTimetableShareCode(id)) || code;
-  setTimetableStatus(`已加入日程表，分享码：${shareCode}，ID：${currentTimetableId}`);
+  setTimetableStatus(`Joined timetable — share code: ${shareCode}, ID: ${currentTimetableId}`);
   await loadEventsAndRender();
   setupRealtime();
   updateSharingUi();
@@ -825,8 +827,8 @@ saveConfigBtn.addEventListener("click", async () => {
     const ai = aiApiUrlInput.value.trim();
     setStatus(
       ai
-        ? "配置已保存：Supabase 已连接，AI 代理地址已记录（识别图片时会用）"
-        : "配置已保存：Supabase 已连接。识别前请再填「AI 代理接口地址」"
+        ? "Saved: Supabase connected; AI proxy URL stored for recognition."
+        : "Saved: Supabase connected. Add the AI proxy URL before recognizing images."
     );
   }
 });
@@ -871,7 +873,7 @@ function consumeAuthErrorFromUrl() {
   const err = params.get("error");
   if (code === "otp_expired" || err === "access_denied") {
     setAuthStatus(
-      "邮件里的登录链接已过期或已使用过，请回到本页重新点「发送登录链接」",
+      "That sign-in link expired or was already used. Return here and send a new magic link.",
       true
     );
     window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
