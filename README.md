@@ -1,7 +1,7 @@
-# WE_MEET - 多人协作课表
+# WE_MEET - 多人协作日程表
 
-上传课表图片，AI 提取事件后写入 Supabase，并以 30 分钟粒度展示 `busy/available`。  
-支持多人共享同一课表、实时同步更新。
+上传日程截图（日历、应用排期等），AI 提取占用时段后写入 Supabase，并以 30 分钟粒度展示 `busy/available`。  
+支持多人共享同一份日程表、实时同步更新。
 
 ## 现在的架构
 
@@ -13,7 +13,9 @@
 
 1. 在 Supabase 创建项目
 2. 打开 SQL Editor，执行 `supabase/schema.sql`
-3. 在项目里开启 Email OTP 登录（Auth -> Providers）
+3. 在项目里开启登录方式：**Authentication → Providers**
+   - 开启 **Email**（Magic Link）
+   - 可选：开启 **Google**（需在控制台配置 Google OAuth 客户端 ID/Secret，并把站点 URL 加入重定向白名单）
 4. 确认 Realtime 已启用（`events` 表会加入 publication）
 
 ## 2) 部署 AI 代理（Cloudflare Worker）
@@ -43,16 +45,16 @@ python3 -m http.server 8080
 
 然后：
 
-1. 邮箱登录（Magic Link）
-2. 创建课表（会返回分享码）
+1. **可选**「创建本机日程」：无需登录，数据仅存浏览器，不可共享。
+2. 或 **邮箱 / Google** 登录后，创建云端日程表（会返回分享码）
 3. 其他成员用分享码加入
-4. 上传图片识别，结果写入同一课表并实时同步
+4. 上传图片识别，结果写入同一份日程表并实时同步
 
 ## 4) 核心表
 
-- `timetables`：课表主表
+- `timetables`：日程表主表（技术名未改）
 - `timetable_members`：成员与角色（owner/editor/viewer）
-- `events`：课程/活动明细（day/start/end/title/source）
+- `events`：活动/占用明细（day/start/end/title/source）
 
 ## 5) 安全说明
 

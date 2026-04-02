@@ -1,17 +1,17 @@
-const DEFAULT_MODEL = "gemini-3-flash";
+const DEFAULT_MODEL = "gemini-2.5-flash";
 
 function buildPrompt() {
   return [
     "# Role: 高级视觉网格分析器 (Visual Grid Analyzer)",
     "",
     "# Task:",
-    "将课程表图片转化为结构化 JSON。这张图是一个标准的二维矩阵，你需要通过行列对齐来锁定每个课程的具体属性。",
+    "将日程表截图转化为结构化 JSON。这张图是一个标准的二维矩阵，你需要通过行列对齐来锁定每个占用块的具体属性。",
     "",
     "# Logic Protocol:",
     "1. 建立 X 轴 (日期): 识别顶部第一行（周一至周日）。",
     "2. 建立 Y 轴 (时间): 识别最左侧时间列。",
     "3. 色块定位: 扫描带文字的色块，通过垂直和水平对齐确定 day/start/end。",
-    "4. 提取内容: 课程块顶部主要文字作为 title。",
+    "4. 提取内容: 色块顶部主要文字作为 title（活动/事项名称）。",
     "",
     "# Output Rules:",
     "- 严格输出 JSON，无任何解释。",
@@ -19,7 +19,7 @@ function buildPrompt() {
     "",
     "{",
     '  "events": [',
-    '    {"day":"周几","start":"HH:mm","end":"HH:mm","title":"课程名"}',
+    '    {"day":"周几","start":"HH:mm","end":"HH:mm","title":"事项名"}',
     "  ],",
     '  "rawText":"optional"',
     "}",
@@ -55,7 +55,10 @@ export default {
       if (!imageBase64) {
         return jsonResponse({ error: "imageBase64 is required" }, 400);
       }
-      const model = env.GEMINI_MODEL || DEFAULT_MODEL;
+      let model = (env.GEMINI_MODEL || "").trim() || DEFAULT_MODEL;
+      if (model.includes("gemini-3-flash")) {
+        model = DEFAULT_MODEL;
+      }
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(
         env.GEMINI_API_KEY
       )}`;

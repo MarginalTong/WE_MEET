@@ -3,72 +3,272 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>课表空闲检测（Apple 风）</title>
+    <title>WE MEET · 日程协作</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Outfit:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <main class="container">
-      <h1>课表空闲检测（Apple 风）</h1>
-      <p class="desc">
-        上传课表截图后，自动输出每个时段的 <strong>busy / available</strong>。
-      </p>
-
-      <section class="card">
-        <h2>1) Supabase 配置</h2>
-        <label for="supabaseUrl">Supabase URL</label>
-        <input id="supabaseUrl" type="text" placeholder="https://xxx.supabase.co" />
-        <label for="supabaseAnonKey">Supabase Anon Key</label>
-        <input id="supabaseAnonKey" type="text" placeholder="eyJhbGciOi..." />
-        <label for="aiApiUrl">AI 代理接口地址</label>
-        <input id="aiApiUrl" type="text" placeholder="http://localhost:8787/extract" />
-        <div class="actions">
-          <button id="saveConfigBtn">保存配置</button>
+    <div class="app-noise" aria-hidden="true"></div>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="主导航">
+        <div class="sidebar__brand">
+          <span class="sidebar__logo">◇</span>
+          <div class="sidebar__titles">
+            <span class="sidebar__name">WE MEET</span>
+            <span class="sidebar__tag">协作日程</span>
+          </div>
         </div>
-      </section>
-
-      <section class="card">
-        <h2>2) 登录与共享课表</h2>
-        <label for="emailInput">邮箱登录（Magic Link）</label>
-        <input id="emailInput" type="email" placeholder="you@example.com" />
-        <div class="actions">
-          <button id="sendMagicBtn">发送登录链接</button>
-          <button id="signOutBtn">退出登录</button>
+        <nav class="sidebar__nav">
+          <button
+            type="button"
+            class="sidebar__link sidebar__link--active"
+            data-view="import"
+            aria-current="page"
+          >
+            <span class="sidebar__icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+              </svg>
+            </span>
+            <span class="sidebar__label">导入课表</span>
+            <span class="sidebar__hint">截图识别</span>
+          </button>
+          <button type="button" class="sidebar__link" data-view="timetable">
+            <span class="sidebar__icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <path d="M16 2v4M8 2v4M3 10h18" />
+              </svg>
+            </span>
+            <span class="sidebar__label">可视化课表</span>
+            <span class="sidebar__hint">周视图</span>
+          </button>
+          <button type="button" class="sidebar__link" data-view="meet">
+            <span class="sidebar__icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+            </span>
+            <span class="sidebar__label">空闲 & 投票</span>
+            <span class="sidebar__hint">约时间</span>
+          </button>
+        </nav>
+        <div class="sidebar__footer">
+          <p>30 分钟粒度 · busy / available</p>
         </div>
-        <p id="authStatus" class="status">未登录</p>
-        <label for="shareCodeInput">课表分享码</label>
-        <input id="shareCodeInput" type="text" placeholder="输入分享码加入课表" />
-        <div class="actions">
-          <button id="createTimetableBtn">创建新课表</button>
-          <button id="joinTimetableBtn">加入课表</button>
+      </aside>
+
+      <div class="main-scroll">
+        <!-- 视图 1：导入 -->
+        <div class="view view--active" id="view-import" data-view-panel="import">
+          <header class="page-hero">
+            <p class="page-hero__eyebrow">协作日程</p>
+            <h1 class="page-hero__title">把课表截图变成可协作的网格</h1>
+            <p class="page-hero__lead">
+              上传日程截图，AI 解析后与云端合并；在「可视化课表」查看占用，在「空闲 & 投票」里约共同时间（投票区为界面预览，数据能力可后续接入）。
+            </p>
+          </header>
+
+          <section class="card card--elevated panel">
+            <div class="panel-head">
+              <span class="step">01</span>
+              <h2>Supabase 配置</h2>
+            </div>
+            <p class="desc">
+              已内置本项目默认连接，打开页面会自动填入并尝试连接；一般无需再手填。若要改用其它环境，可修改后点「保存配置」。
+            </p>
+            <div class="field">
+              <label for="supabaseUrl">Supabase URL</label>
+              <input id="supabaseUrl" type="text" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="supabaseAnonKey">Supabase Anon Key</label>
+              <input id="supabaseAnonKey" type="text" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="aiApiUrl">AI 代理接口地址</label>
+              <input id="aiApiUrl" type="text" autocomplete="off" />
+            </div>
+            <div class="actions">
+              <button id="saveConfigBtn" class="btn btn-primary" type="button">保存配置</button>
+            </div>
+          </section>
+
+          <section class="card card--elevated panel">
+            <div class="panel-head">
+              <span class="step">02</span>
+              <h2>登录与共享日程</h2>
+            </div>
+            <p class="desc">
+              本地调试时请先<strong>启动静态服务</strong>，且<strong>端口要与 Supabase 回调一致</strong>（例如邮件跳转到
+              <code>localhost:3000</code>，终端需执行
+              <code>python3 -m http.server 3000</code>）。若用 8080，请在 Supabase
+              Authentication → URL 里把重定向改为 8080，并先访问
+              <code>http://localhost:8080</code> 再发登录邮件。
+            </p>
+            <div class="field">
+              <label for="emailInput">邮箱登录（Magic Link）</label>
+              <input id="emailInput" type="email" placeholder="you@example.com" />
+            </div>
+            <div class="actions actions-wrap">
+              <button id="sendMagicBtn" class="btn btn-primary" type="button">发送登录链接</button>
+              <button id="googleSignInBtn" class="btn btn-secondary" type="button">Google 登录</button>
+              <button id="signOutBtn" class="btn btn-ghost" type="button">退出登录</button>
+            </div>
+            <p id="authStatus" class="status status-inline">未登录</p>
+            <p class="desc">
+              <strong>本机日程（无需登录）</strong>：数据只存在当前浏览器，不能分享、不能多端同步。需要协作请在下方登录后使用云端日程。
+            </p>
+            <div class="actions">
+              <button id="createLocalScheduleBtn" class="btn btn-secondary" type="button">创建本机日程</button>
+            </div>
+            <div class="field">
+              <label for="shareCodeInput">云端日程分享码（需登录）</label>
+              <input id="shareCodeInput" type="text" placeholder="输入分享码加入日程表" />
+            </div>
+            <div class="actions actions-wrap">
+              <button id="createTimetableBtn" class="btn btn-primary" type="button">创建云端日程表</button>
+              <button id="joinTimetableBtn" class="btn btn-primary" type="button">加入日程表</button>
+            </div>
+            <p id="timetableStatus" class="status status-inline">未选择日程表</p>
+          </section>
+
+          <section class="card card--elevated panel panel--accent">
+            <div class="panel-head">
+              <span class="step">03</span>
+              <h2>上传课表图片</h2>
+            </div>
+            <p class="desc">
+              同一份日程表内多次识别会<strong>合并</strong>：新识别出的占用时段会叠加到现有数据上（相同星期+起止时间会跳过，避免重复）。
+            </p>
+            <div class="field field-file">
+              <label for="imageInput" class="file-label">选择日程截图</label>
+              <input id="imageInput" type="file" accept="image/*" />
+            </div>
+            <div class="actions actions-wrap">
+              <button id="recognizeBtn" class="btn btn-accent" type="button">识别并更新日程</button>
+              <button id="downloadBtn" class="btn btn-secondary" type="button" disabled>下载 CSV</button>
+            </div>
+            <p id="status" class="status status-inline">等待上传图片...</p>
+          </section>
+
+          <section class="card card--elevated panel">
+            <div class="panel-head">
+              <span class="step">04</span>
+              <h2>识别结果</h2>
+            </div>
+            <textarea id="rawText" rows="7" placeholder="识别文本会显示在这里"></textarea>
+          </section>
         </div>
-        <p id="timetableStatus" class="status">未选择课表</p>
-      </section>
 
-      <section class="card">
-        <h2>3) 上传图片</h2>
-        <input id="imageInput" type="file" accept="image/*" />
-        <div class="actions">
-          <button id="recognizeBtn">识别并生成课表</button>
-          <button id="downloadBtn" disabled>下载 CSV</button>
+        <!-- 视图 2：可视化课表 -->
+        <div class="view" id="view-timetable" data-view-panel="timetable" hidden>
+          <header class="page-hero page-hero--compact">
+            <p class="page-hero__eyebrow">周视图</p>
+            <h1 class="page-hero__title">可视化课表</h1>
+            <p class="page-hero__lead">按 30 分钟格子展示 busy / available；表头与首列在滚动时保持可见。</p>
+          </header>
+          <section class="card card--elevated panel panel-table">
+            <div id="tableWrap" class="table-wrap"></div>
+          </section>
         </div>
-        <p id="status" class="status">等待上传图片...</p>
-      </section>
 
-      <section class="card">
-        <h2>4) 识别结果</h2>
-        <textarea
-          id="rawText"
-          rows="7"
-          placeholder="识别文本会显示在这里"
-        ></textarea>
-      </section>
+        <!-- 视图 3：空闲推荐 + 投票（界面预览） -->
+        <div class="view" id="view-meet" data-view-panel="meet" hidden>
+          <header class="page-hero page-hero--compact">
+            <p class="page-hero__eyebrow">约时间</p>
+            <h1 class="page-hero__title">空闲推荐与投票</h1>
+            <p class="page-hero__lead">
+              以下为界面示意：根据全员课表交集推荐时段，成员可投票。后端与数据流可后续与 Supabase 对接。
+            </p>
+          </header>
 
-      <section class="card">
-        <h2>5) 周视图（只显示状态）</h2>
-        <div id="tableWrap" class="table-wrap"></div>
-      </section>
-    </main>
+          <section class="card card--elevated meet-section">
+            <h2 class="meet-section__title">推荐空闲（示例）</h2>
+            <p class="meet-section__sub">与当前课表数据无关的静态预览，用于定稿交互与视觉。</p>
+            <ul class="slot-cards">
+              <li class="slot-card slot-card--hot">
+                <div class="slot-card__time">周五 · 18:00 — 19:30</div>
+                <div class="slot-card__meta">3 人全空闲 · 匹配度 92%</div>
+                <div class="slot-card__votes">
+                  <span class="vote-pill vote-pill--yes">已投 4</span>
+                  <span class="vote-pill vote-pill--maybe">待定 1</span>
+                </div>
+                <button type="button" class="btn btn-accent btn--sm" disabled>我投这一档（预览）</button>
+              </li>
+              <li class="slot-card">
+                <div class="slot-card__time">周六 · 10:00 — 11:30</div>
+                <div class="slot-card__meta">2 人全空闲 · 匹配度 78%</div>
+                <div class="slot-card__votes">
+                  <span class="vote-pill vote-pill--yes">已投 2</span>
+                </div>
+                <button type="button" class="btn btn-secondary btn--sm" disabled>投一票（预览）</button>
+              </li>
+              <li class="slot-card">
+                <div class="slot-card__time">周日 · 14:00 — 16:00</div>
+                <div class="slot-card__meta">长廊讨论 / 可拆两段</div>
+                <div class="slot-card__votes">
+                  <span class="vote-pill vote-pill--maybe">讨论中</span>
+                </div>
+                <button type="button" class="btn btn-secondary btn--sm" disabled>投一票（预览）</button>
+              </li>
+            </ul>
+          </section>
 
+          <section class="card card--elevated meet-section meet-section--poll">
+            <h2 class="meet-section__title">发起新时段投票</h2>
+            <p class="meet-section__sub">勾选候选星期与大致时段，发起人确认后推送至成员（功能占位）。</p>
+            <div class="poll-grid">
+              <div class="poll-days">
+                <span class="poll-chip">周一</span>
+                <span class="poll-chip poll-chip--on">周三</span>
+                <span class="poll-chip">周五</span>
+                <span class="poll-chip poll-chip--on">周六</span>
+              </div>
+              <div class="field">
+                <label>时段范围（示意）</label>
+                <input type="text" class="input--ghost" value="15:00 — 20:00" readonly />
+              </div>
+            </div>
+            <div class="actions">
+              <button type="button" class="btn btn-primary" disabled>创建投票（即将推出）</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        var links = document.querySelectorAll(".sidebar__link[data-view]");
+        var panels = document.querySelectorAll(".view[data-view-panel]");
+
+        function showView(name) {
+          panels.forEach(function (el) {
+            var on = el.getAttribute("data-view-panel") === name;
+            el.hidden = !on;
+            el.classList.toggle("view--active", on);
+          });
+          links.forEach(function (btn) {
+            var on = btn.getAttribute("data-view") === name;
+            btn.classList.toggle("sidebar__link--active", on);
+            if (on) btn.setAttribute("aria-current", "page");
+            else btn.removeAttribute("aria-current");
+          });
+        }
+
+        links.forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            showView(btn.getAttribute("data-view"));
+          });
+        });
+      })();
+    </script>
     <script type="module" src="./app.js"></script>
   </body>
 </html>

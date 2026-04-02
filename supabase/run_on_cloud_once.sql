@@ -1,70 +1,8 @@
--- Run this file in Supabase SQL Editor.
--- It creates collaboration tables, functions, indexes, and RLS policies.
+-- Paste the ENTIRE file into Supabase → SQL Editor → Run once.
+-- Fixes: infinite recursion on timetable_members, failed timetables/events REST, share_code "获取失败".
+-- Safe to re-run (idempotent policies + replace functions).
 
-create extension if not exists pgcrypto;
-
-create table if not exists public.timetables (
-  id uuid primary key default gen_random_uuid(),
-  name text not null default '未命名日程表',
-  share_code text not null unique default upper(substr(md5(gen_random_uuid()::text), 1, 8)),
-  timezone text not null default 'Asia/Shanghai',
-  created_by uuid not null references auth.users(id) on delete cascade,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create table if not exists public.timetable_members (
-  timetable_id uuid not null references public.timetables(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade,
-  role text not null check (role in ('owner', 'editor', 'viewer')),
-  created_at timestamptz not null default now(),
-  primary key (timetable_id, user_id)
-);
-
-create table if not exists public.events (
-  id uuid primary key default gen_random_uuid(),
-  timetable_id uuid not null references public.timetables(id) on delete cascade,
-  day text not null check (day in ('周一', '周二', '周三', '周四', '周五', '周六', '周日')),
-  start text not null check (start ~ '^([01][0-9]|2[0-4]):[0-5][0-9]$'),
-  "end" text not null check ("end" ~ '^([01][0-9]|2[0-4]):[0-5][0-9]$'),
-  title text,
-  source text not null default 'manual',
-  created_by uuid references auth.users(id),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create index if not exists idx_events_timetable_id on public.events (timetable_id);
-create index if not exists idx_events_timetable_start on public.events (timetable_id, start);
-create index if not exists idx_timetable_members_user_id on public.timetable_members (user_id);
-
-create or replace function public.set_updated_at()
-returns trigger
-language plpgsql
-as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_timetables_updated_at on public.timetables;
-create trigger trg_timetables_updated_at
-before update on public.timetables
-for each row execute function public.set_updated_at();
-
-drop trigger if exists trg_events_updated_at on public.events;
-create trigger trg_events_updated_at
-before update on public.events
-for each row execute function public.set_updated_at();
-
--- Why "infinite recursion" on cloud timetables (PostgreSQL error, not a browser loop):
--- Any RLS policy on timetable_members that does EXISTS (SELECT ... FROM timetable_members ...)
--- re-triggers the SAME policy for each inner row → recursion limit.
--- Policies on timetables/events that subqueried timetable_members also pulled that chain in.
--- Fix: membership checks run inside SECURITY DEFINER helpers with SET row_security = off
--- so the lookup does not evaluate RLS on timetable_members again. (DEFINER alone can still
--- apply RLS under FORCE ROW LEVEL SECURITY or owner mismatch on Supabase.)
+-- 1) Membership helpers: must use row_security = off or inner reads re-enter RLS.
 create or replace function public.timetable_member_has_role(
   p_timetable_id uuid,
   p_roles text[] default array['owner', 'editor', 'viewer']::text[]
@@ -99,40 +37,29 @@ $$;
 grant execute on function public.timetable_member_has_role(uuid, text[]) to authenticated;
 grant execute on function public.timetable_member_is_owner(uuid) to authenticated;
 
--- Return type change: drop old signatures before replace.
+-- 2) RPC return type change (uuid → json with share_code)
 drop function if exists public.create_timetable(text);
 drop function if exists public.join_timetable_by_code(text);
 
-alter table public.timetables enable row level security;
-alter table public.timetable_members enable row level security;
-alter table public.events enable row level security;
-
+-- 3) RLS policies (depend on helpers above)
 drop policy if exists timetables_select_members on public.timetables;
 create policy timetables_select_members
-on public.timetables
-for select
-to authenticated
+on public.timetables for select to authenticated
 using (public.timetable_member_has_role(timetables.id));
 
 drop policy if exists timetables_insert_owner on public.timetables;
 create policy timetables_insert_owner
-on public.timetables
-for insert
-to authenticated
+on public.timetables for insert to authenticated
 with check (created_by = auth.uid());
 
 drop policy if exists timetables_update_owner on public.timetables;
 create policy timetables_update_owner
-on public.timetables
-for update
-to authenticated
+on public.timetables for update to authenticated
 using (public.timetable_member_is_owner(timetables.id));
 
 drop policy if exists timetable_members_select_self_or_members on public.timetable_members;
 create policy timetable_members_select_self_or_members
-on public.timetable_members
-for select
-to authenticated
+on public.timetable_members for select to authenticated
 using (
   user_id = auth.uid()
   or public.timetable_member_has_role(timetable_members.timetable_id)
@@ -140,45 +67,36 @@ using (
 
 drop policy if exists timetable_members_insert_owner on public.timetable_members;
 create policy timetable_members_insert_owner
-on public.timetable_members
-for insert
-to authenticated
+on public.timetable_members for insert to authenticated
 with check (public.timetable_member_is_owner(timetable_members.timetable_id));
 
 drop policy if exists events_select_members on public.events;
 create policy events_select_members
-on public.events
-for select
-to authenticated
+on public.events for select to authenticated
 using (public.timetable_member_has_role(events.timetable_id));
 
 drop policy if exists events_insert_editor_or_owner on public.events;
 create policy events_insert_editor_or_owner
-on public.events
-for insert
-to authenticated
+on public.events for insert to authenticated
 with check (
   public.timetable_member_has_role(events.timetable_id, array['owner', 'editor']::text[])
 );
 
 drop policy if exists events_update_editor_or_owner on public.events;
 create policy events_update_editor_or_owner
-on public.events
-for update
-to authenticated
+on public.events for update to authenticated
 using (
   public.timetable_member_has_role(events.timetable_id, array['owner', 'editor']::text[])
 );
 
 drop policy if exists events_delete_editor_or_owner on public.events;
 create policy events_delete_editor_or_owner
-on public.events
-for delete
-to authenticated
+on public.events for delete to authenticated
 using (
   public.timetable_member_has_role(events.timetable_id, array['owner', 'editor']::text[])
 );
 
+-- 4) RPCs return { id, share_code }
 create or replace function public.create_timetable(p_name text default '未命名日程表')
 returns json
 language plpgsql
@@ -240,5 +158,3 @@ end;
 $$;
 
 grant execute on function public.join_timetable_by_code(text) to authenticated;
-
-alter publication supabase_realtime add table public.events;
