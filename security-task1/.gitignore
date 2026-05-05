@@ -1,0 +1,6 @@
+data/
+client-state/
+certs/*.key
+certs/*.csr
+certs/*.srl
+certs/*.ext

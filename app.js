@@ -25,8 +25,10 @@ const googleSignInBtn = document.getElementById("googleSignInBtn");
 const DAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 const DAY_HEADERS_EN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MAX_IMAGE_BYTES = 250 * 1024;
-const HALF_HOUR_SLOTS = Array.from({ length: 48 }, (_, idx) => {
-  const startMin = idx * 30;
+const DISPLAY_START_MINUTES = 6 * 60;
+const DISPLAY_END_MINUTES = 24 * 60;
+const HALF_HOUR_SLOTS = Array.from({ length: (DISPLAY_END_MINUTES - DISPLAY_START_MINUTES) / 30 }, (_, idx) => {
+  const startMin = DISPLAY_START_MINUTES + idx * 30;
   const endMin = startMin + 30;
   const startHour = String(Math.floor(startMin / 60)).padStart(2, "0");
   const startMinute = String(startMin % 60).padStart(2, "0");
@@ -272,7 +274,7 @@ function buildRowsFromEvents(events) {
   const grid = HALF_HOUR_SLOTS.map(() => Object.fromEntries(DAYS.map((d) => [d, "available"])));
   events.forEach((event) => {
     HALF_HOUR_SLOTS.forEach((_, idx) => {
-      const slotStart = idx * 30;
+      const slotStart = DISPLAY_START_MINUTES + idx * 30;
       const slotEnd = slotStart + 30;
       if (event.startMin < slotEnd && event.endMin > slotStart) {
         grid[idx][event.day] = "busy";

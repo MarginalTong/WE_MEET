@@ -14,8 +14,8 @@
 1. 在 Supabase 创建项目
 2. 打开 SQL Editor，执行 `supabase/schema.sql`
 3. 在项目里开启登录方式：**Authentication → Providers**
-   - 开启 **Email**（Magic Link）
-   - 可选：开启 **Google**（需在控制台配置 Google OAuth 客户端 ID/Secret，并把站点 URL 加入重定向白名单）
+  - 开启 **Email**（Magic Link）
+  - 可选：开启 **Google**（需在控制台配置 Google OAuth 客户端 ID/Secret，并把站点 URL 加入重定向白名单）
 4. 确认 Realtime 已启用（`events` 表会加入 publication）
 
 ## 2) 部署 AI 代理（Cloudflare Worker）
@@ -61,3 +61,14 @@ python3 -m http.server 8080
 - Gemini Key 只在 Worker Secret 中保存，不出现在前端
 - 前端仅使用 Supabase Anon Key（配合 RLS 控制权限）
 - RLS 已按成员角色限制读写
+
+## INFO2222 Task 1 (Security) Demo
+
+作业 Task 1 的独立可演示实现位于 `security-task1/`，包含：
+
+- HTTPS (TLS 1.2+) 登录传输
+- 带盐密码哈希存储（PBKDF2）
+- 客户端证书验证（CA + 可选证书指纹 pinning）
+- E2EE 消息加密 + 签名完整性校验
+
+快速说明见 `security-task1/README.md`。
