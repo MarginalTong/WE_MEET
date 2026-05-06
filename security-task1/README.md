@@ -1,6 +1,6 @@
 # Task 1 Security Implementation (INFO2222)
 
-This folder is a standalone secure communication demo aligned with Task 1:
+This folder is a secure communication module aligned with Task 1.
 
 - secure password storage with salting + strong KDF
 - server authentication before credentials are sent
@@ -12,6 +12,7 @@ This folder is a standalone secure communication demo aligned with Task 1:
 ### A. Secure password storage
 
 - `server.js` stores **only salted password hashes**, never plaintext
+- storage backend is Supabase Postgres table `public.task1_users`
 - KDF: `PBKDF2-HMAC-SHA256`
 - parameters:
   - random 16-byte per-user salt
@@ -58,9 +59,13 @@ Hardcoded CA key implications (for discussion in your report/video):
   - AES-256-GCM encryption
 - sender signs envelope with Ed25519 signature
 - recipient verifies signature and decrypts locally
-- server only stores ciphertext envelope and metadata, never plaintext
+- server only stores ciphertext envelope and metadata in `public.task1_messages`, never plaintext
 
-## 2) Generate demo certificates
+## 2) Prepare Supabase tables
+
+Run `supabase/task1_security.sql` in Supabase SQL Editor first.
+
+## 3) Generate demo certificates
 
 ```bash
 bash security-task1/scripts/generate-dev-certs.sh
@@ -72,7 +77,14 @@ This creates:
 - `security-task1/certs/server.crt`
 - `security-task1/certs/server.key`
 
-## 3) Run server
+## 4) Run server
+
+Set environment variables (service role key is required because this auth is server-side):
+
+```bash
+export SUPABASE_URL="https://YOUR-PROJECT.supabase.co"
+export SUPABASE_SERVICE_ROLE_KEY="YOUR_SERVICE_ROLE_KEY"
+```
 
 ```bash
 node security-task1/server.js
@@ -80,7 +92,7 @@ node security-task1/server.js
 
 Server starts at `https://localhost:8443`.
 
-## 4) Demo commands (client)
+## 5) Demo commands (client)
 
 In another terminal:
 
@@ -101,17 +113,17 @@ export PINNED_SERVER_FINGERPRINT256="SHA256 Fingerprint Value"
 node security-task1/client-demo.js tls-info
 ```
 
-## 5) Suggested 5-minute Task 1 video flow
+## 6) Suggested 5-minute Task 1 video flow
 
 1. show `security-task1/server.js` password KDF config and salt/hash storage
-2. run register/login; open `security-task1/data/users.json` to show no plaintext password
+2. run register/login; query `public.task1_users` in Supabase table editor to show no plaintext password
 3. show generated CA + server cert and explain trust chain
 4. run `tls-info` and mention TLSv1.2+ minimum + cert check
 5. send encrypted message from Alice to Bob, then:
-  - show `security-task1/data/messages.json` ciphertext only
+  - show `public.task1_messages` ciphertext JSON only
   - run Bob inbox decryption and signature verification path
 
-## 6) AI usage appendix hint
+## 7) AI usage appendix hint
 
 List at least these files in your report appendix table:
 

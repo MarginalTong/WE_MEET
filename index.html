@@ -104,12 +104,6 @@
             <div class="panel-head">
               <h2>Sign in &amp; shared timetable</h2>
             </div>
-            <p class="desc">
-              For local dev, run a <strong>static server</strong> and match the <strong>port to Supabase redirect URLs</strong>
-              (e.g. magic links to <code>localhost:3000</code> → run
-              <code>python3 -m http.server 3000</code>). If you use 8080, set the redirect in Supabase Authentication →
-              URL Configuration and open <code>http://localhost:8080</code> before sending the email.
-            </p>
             <div class="field">
               <label for="emailInput">Email (magic link)</label>
               <input id="emailInput" type="email" placeholder="you@example.com" />
@@ -120,13 +114,23 @@
               <button id="signOutBtn" class="btn btn-ghost" type="button">Sign out</button>
             </div>
             <p id="authStatus" class="status status-inline">Signed out</p>
-            <p class="desc">
-              <strong>Local-only schedule</strong> (no sign-in): data stays in this browser — no sharing or sync. Sign in
-              below for a cloud timetable.
-            </p>
-            <div class="actions">
-              <button id="createLocalScheduleBtn" class="btn btn-secondary" type="button">Create local schedule</button>
+            <div class="field">
+              <label for="passwordAuthUrlInput">Password auth server URL</label>
+              <input id="passwordAuthUrlInput" type="text" value="https://localhost:9443" />
             </div>
+            <div class="field">
+              <label for="passwordUsernameInput">Username</label>
+              <input id="passwordUsernameInput" type="text" placeholder="alice" autocomplete="username" />
+            </div>
+            <div class="field">
+              <label for="passwordValueInput">Password</label>
+              <input id="passwordValueInput" type="password" placeholder="Strong password" autocomplete="current-password" />
+            </div>
+            <div class="actions actions-wrap">
+              <button id="passwordRegisterBtn" class="btn btn-secondary" type="button">Register (password)</button>
+              <button id="passwordLoginBtn" class="btn btn-primary" type="button">Login (password)</button>
+            </div>
+            <p id="passwordAuthStatus" class="status status-inline">Password login not connected</p>
             <div class="field">
               <label for="shareCodeInput">Cloud share code (signed in)</label>
               <input id="shareCodeInput" type="text" placeholder="Enter code to join a timetable" />
@@ -142,10 +146,6 @@
             <div class="panel-head">
               <h2>Upload timetable image</h2>
             </div>
-            <p class="desc">
-              Multiple runs on the same timetable <strong>merge</strong>: new busy slots add on top (same weekday + start/end
-              are skipped to avoid duplicates).
-            </p>
             <div class="field field-file">
               <label for="imageInput" class="file-label">Choose screenshot</label>
               <input id="imageInput" type="file" accept="image/*" />

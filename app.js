@@ -14,11 +14,16 @@ const emailInput = document.getElementById("emailInput");
 const sendMagicBtn = document.getElementById("sendMagicBtn");
 const signOutBtn = document.getElementById("signOutBtn");
 const authStatus = document.getElementById("authStatus");
+const passwordAuthUrlInput = document.getElementById("passwordAuthUrlInput");
+const passwordUsernameInput = document.getElementById("passwordUsernameInput");
+const passwordValueInput = document.getElementById("passwordValueInput");
+const passwordRegisterBtn = document.getElementById("passwordRegisterBtn");
+const passwordLoginBtn = document.getElementById("passwordLoginBtn");
+const passwordAuthStatus = document.getElementById("passwordAuthStatus");
 const shareCodeInput = document.getElementById("shareCodeInput");
 const createTimetableBtn = document.getElementById("createTimetableBtn");
 const joinTimetableBtn = document.getElementById("joinTimetableBtn");
 const timetableStatus = document.getElementById("timetableStatus");
-const createLocalScheduleBtn = document.getElementById("createLocalScheduleBtn");
 const googleSignInBtn = document.getElementById("googleSignInBtn");
 
 /** Canonical weekday keys (must match DB / AI output). */
@@ -61,7 +66,12 @@ function getValidCloudTimetableId() {
 }
 
 function clearInvalidCloudTimetableId() {
-  if (!currentTimetableId || currentTimetableId === LOCAL_SCHEDULE_ID) return;
+  if (!currentTimetableId) return;
+  if (currentTimetableId === LOCAL_SCHEDULE_ID) {
+    currentTimetableId = "";
+    localStorage.removeItem(STORAGE_KEYS.timetableId);
+    return;
+  }
   if (getValidCloudTimetableId()) return;
   currentTimetableId = "";
   localStorage.removeItem(STORAGE_KEYS.timetableId);
@@ -71,6 +81,9 @@ const STORAGE_KEYS = {
   supabaseUrl: "we_meet_supabase_url",
   supabaseAnon: "we_meet_supabase_anon",
   aiApiUrl: "we_meet_ai_api_url",
+  passwordAuthUrl: "we_meet_password_auth_url",
+  passwordAuthToken: "we_meet_password_auth_token",
+  passwordAuthUser: "we_meet_password_auth_user",
   timetableId: "we_meet_timetable_id",
   localEvents: "we_meet_local_events_v1",
 };
@@ -81,6 +94,7 @@ const DEFAULT_APP_CONFIG = {
   supabaseAnonKey:
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmb2lnenNodGtzdG9zamJxdWhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwNTU2NDIsImV4cCI6MjA5MDYzMTY0Mn0.h6iFTFsQGb48zgmnLnUJyhjwp-ufWgg3AtimANsrWzk",
   aiApiUrl: "https://we-meet-ai-proxy.grjtqz2g9m-085.workers.dev",
+  passwordAuthUrl: "https://localhost:9443",
 };
 
 let supabase = null;
@@ -119,12 +133,10 @@ function saveLocalEvents(events) {
 }
 
 function updateSharingUi() {
-  const loggedIn = Boolean(currentUser);
-  const cloud = Boolean(currentTimetableId) && !isLocalSchedule();
-  const canShare = loggedIn && cloud;
-  if (shareCodeInput) shareCodeInput.disabled = !canShare;
-  if (joinTimetableBtn) joinTimetableBtn.disabled = !canShare;
-  if (createTimetableBtn) createTimetableBtn.disabled = !loggedIn;
+  const supabaseLoggedIn = Boolean(currentUser);
+  if (shareCodeInput) shareCodeInput.disabled = !supabaseLoggedIn;
+  if (joinTimetableBtn) joinTimetableBtn.disabled = !supabaseLoggedIn;
+  if (createTimetableBtn) createTimetableBtn.disabled = !supabaseLoggedIn;
   if (googleSignInBtn) googleSignInBtn.disabled = !supabase;
 }
 
@@ -136,6 +148,12 @@ function setStatus(text, isError = false) {
 function setAuthStatus(text, isError = false) {
   authStatus.textContent = text;
   authStatus.style.color = isError ? "#b91c1c" : "#4b5563";
+}
+
+function setPasswordAuthStatus(text, isError = false) {
+  if (!passwordAuthStatus) return;
+  passwordAuthStatus.textContent = text;
+  passwordAuthStatus.style.color = isError ? "#b91c1c" : "#4b5563";
 }
 
 function setTimetableStatus(text, isError = false) {
@@ -627,16 +645,14 @@ function saveConfig() {
   localStorage.setItem(STORAGE_KEYS.supabaseUrl, supabaseUrlInput.value.trim());
   localStorage.setItem(STORAGE_KEYS.supabaseAnon, supabaseAnonInput.value.trim());
   localStorage.setItem(STORAGE_KEYS.aiApiUrl, aiApiUrlInput.value.trim());
+  if (passwordAuthUrlInput) {
+    localStorage.setItem(STORAGE_KEYS.passwordAuthUrl, passwordAuthUrlInput.value.trim());
+  }
 }
 
 async function initSupabase() {
   saveConfig();
-  if (currentTimetableId === LOCAL_SCHEDULE_ID) {
-    setTimetableStatus(
-      "Local-only schedule: data stays in this browser and is not shared."
-    );
-    await loadEventsAndRender();
-  }
+  clearInvalidCloudTimetableId();
 
   const url = localStorage.getItem(STORAGE_KEYS.supabaseUrl) || "";
   const anon = localStorage.getItem(STORAGE_KEYS.supabaseAnon) || "";
@@ -662,14 +678,14 @@ async function initSupabase() {
   setAuthStatus(
     currentUser
       ? `Signed in: ${currentUser.email || currentUser.user_metadata?.full_name || "User"}`
-      : "Signed out (local schedule / email or Google sign-in)"
+      : "Signed out (email or Google sign-in)"
   );
   const { data: authData } = supabase.auth.onAuthStateChange((_event, session) => {
     currentUser = session?.user || null;
     setAuthStatus(
       currentUser
         ? `Signed in: ${currentUser.email || currentUser.user_metadata?.full_name || "User"}`
-        : "Signed out (local schedule / email or Google sign-in)"
+        : "Signed out (email or Google sign-in)"
     );
     updateSharingUi();
   });
@@ -710,6 +726,73 @@ async function sendMagicLink() {
   setAuthStatus("Magic link sent. Check your inbox and open the latest email once, within a few minutes.");
 }
 
+function getPasswordAuthBaseUrl() {
+  const v = String(passwordAuthUrlInput?.value || "").trim();
+  return v || DEFAULT_APP_CONFIG.passwordAuthUrl;
+}
+
+async function passwordAuthRequest(pathname, payload) {
+  const baseUrl = getPasswordAuthBaseUrl();
+  if (!baseUrl) {
+    throw new Error("Set Password auth server URL first");
+  }
+  const res = await fetch(`${baseUrl}${pathname}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || `Password auth failed (${res.status})`);
+  }
+  return data;
+}
+
+function generatePasswordDemoKeys() {
+  const id = (crypto?.randomUUID?.() || `${Date.now()}`).replace(/-/g, "");
+  return {
+    e2eePublicKey: `demo-e2ee-${id}`,
+    signingPublicKey: `demo-sign-${id}`,
+  };
+}
+
+async function registerWithPassword() {
+  const username = String(passwordUsernameInput?.value || "").trim().toLowerCase();
+  const password = String(passwordValueInput?.value || "");
+  if (!username || !password) {
+    setPasswordAuthStatus("Enter username and password", true);
+    return;
+  }
+  try {
+    await passwordAuthRequest("/register", {
+      username,
+      password,
+      ...generatePasswordDemoKeys(),
+    });
+    setPasswordAuthStatus(`Password account created: ${username}`);
+  } catch (error) {
+    setPasswordAuthStatus(error.message || "Password register failed", true);
+  }
+}
+
+async function loginWithPassword() {
+  const username = String(passwordUsernameInput?.value || "").trim().toLowerCase();
+  const password = String(passwordValueInput?.value || "");
+  if (!username || !password) {
+    setPasswordAuthStatus("Enter username and password", true);
+    return;
+  }
+  try {
+    const result = await passwordAuthRequest("/login", { username, password });
+    localStorage.setItem(STORAGE_KEYS.passwordAuthToken, result.token || "");
+    localStorage.setItem(STORAGE_KEYS.passwordAuthUser, username);
+    setPasswordAuthStatus(`Password login successful: ${username} (Task 1 demo mode)`);
+    setTimetableStatus("Cloud timetable actions require Supabase sign-in (Google or magic link).");
+  } catch (error) {
+    setPasswordAuthStatus(error.message || "Password login failed", true);
+  }
+}
+
 async function signOut() {
   if (!supabase) return;
   if (realtimeChannel) {
@@ -717,35 +800,13 @@ async function signOut() {
     realtimeChannel = null;
   }
   await supabase.auth.signOut();
-  if (currentTimetableId && !isLocalSchedule()) {
+  if (currentTimetableId) {
     currentTimetableId = "";
     localStorage.removeItem(STORAGE_KEYS.timetableId);
   }
-  if (isLocalSchedule()) {
-    setTimetableStatus(
-      "Local-only schedule (signed out); data remains in this browser."
-    );
-  } else {
-    setTimetableStatus("No cloud timetable selected");
-  }
+  setTimetableStatus("No cloud timetable selected");
   await loadEventsAndRender();
   updateSharingUi();
-}
-
-function createLocalSchedule() {
-  if (realtimeChannel && supabase) {
-    supabase.removeChannel(realtimeChannel);
-    realtimeChannel = null;
-  }
-  currentTimetableId = LOCAL_SCHEDULE_ID;
-  localStorage.setItem(STORAGE_KEYS.timetableId, LOCAL_SCHEDULE_ID);
-  saveLocalEvents([]);
-  setTimetableStatus(
-    "Local-only schedule: data stays in this browser. Sign in to use a shared cloud timetable."
-  );
-  loadEventsAndRender();
-  updateSharingUi();
-  setStatus("Local schedule created — you can upload an image to recognize");
 }
 
 async function signInWithGoogle() {
@@ -838,7 +899,8 @@ sendMagicBtn.addEventListener("click", sendMagicLink);
 signOutBtn.addEventListener("click", signOut);
 createTimetableBtn.addEventListener("click", createTimetable);
 joinTimetableBtn.addEventListener("click", joinTimetable);
-createLocalScheduleBtn?.addEventListener("click", createLocalSchedule);
+passwordRegisterBtn?.addEventListener("click", registerWithPassword);
+passwordLoginBtn?.addEventListener("click", loginWithPassword);
 googleSignInBtn?.addEventListener("click", () => {
   signInWithGoogle();
 });
@@ -865,6 +927,19 @@ function loadConfigInputs() {
     localStorage.getItem(STORAGE_KEYS.supabaseAnon) || DEFAULT_APP_CONFIG.supabaseAnonKey;
   aiApiUrlInput.value =
     localStorage.getItem(STORAGE_KEYS.aiApiUrl) || DEFAULT_APP_CONFIG.aiApiUrl;
+  if (passwordAuthUrlInput) {
+    passwordAuthUrlInput.value =
+      localStorage.getItem(STORAGE_KEYS.passwordAuthUrl) || DEFAULT_APP_CONFIG.passwordAuthUrl;
+  }
+  const passwordUser = localStorage.getItem(STORAGE_KEYS.passwordAuthUser) || "";
+  if (passwordUsernameInput && passwordUser) {
+    passwordUsernameInput.value = passwordUser;
+  }
+  if (localStorage.getItem(STORAGE_KEYS.passwordAuthToken)) {
+    setPasswordAuthStatus(
+      `Password auth ready: ${passwordUser || "Saved user"} is logged in for Task 1 demo mode.`
+    );
+  }
 }
 
 function consumeAuthErrorFromUrl() {

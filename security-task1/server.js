@@ -4,10 +4,13 @@ const https = require("https");
 const crypto = require("crypto");
 
 const PORT = Number(process.env.SECURE_CHAT_PORT || 8443);
-const DATA_DIR = path.join(__dirname, "data");
-const USERS_FILE = path.join(DATA_DIR, "users.json");
-const MESSAGES_FILE = path.join(DATA_DIR, "messages.json");
 const CERT_DIR = path.join(__dirname, "certs");
+const SUPABASE_URL = String(process.env.SUPABASE_URL || "").trim();
+const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for Task 1 password auth");
+}
 
 const TLS_OPTIONS = {
   key: fs.readFileSync(path.join(CERT_DIR, "server.key")),
@@ -25,26 +28,46 @@ const HASH_CONFIG = {
 
 const tokenStore = new Map();
 
-function ensureDataFiles() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, "[]");
-  if (!fs.existsSync(MESSAGES_FILE)) fs.writeFileSync(MESSAGES_FILE, "[]");
+function corsHeaders(req) {
+  return {
+    "Access-Control-Allow-Origin": req.headers.origin || "*",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    Vary: "Origin",
+  };
 }
 
-function readJson(filePath) {
-  return JSON.parse(fs.readFileSync(filePath, "utf8"));
-}
-
-function writeJson(filePath, value) {
-  fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
-}
-
-function json(res, statusCode, payload) {
+function json(req, res, statusCode, payload) {
   res.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
+    ...corsHeaders(req),
   });
   res.end(JSON.stringify(payload));
+}
+
+async function supabaseRequest(method, restPath, body) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${restPath}`, {
+    method,
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+  if (!res.ok) {
+    const msg = data?.message || data?.error_description || data?.error || `Supabase REST error ${res.status}`;
+    throw new Error(msg);
+  }
+  return data;
 }
 
 function parseJsonBody(req) {
@@ -103,8 +126,8 @@ function createToken(username) {
   return token;
 }
 
-function routeNotFound(res) {
-  json(res, 404, { error: "Not found" });
+function routeNotFound(req, res) {
+  json(req, res, 404, { error: "Not found" });
 }
 
 async function handleRegister(req, res) {
@@ -115,75 +138,80 @@ async function handleRegister(req, res) {
   const signingPublicKey = String(body.signingPublicKey || "").trim();
 
   if (!username || password.length < 10 || !e2eePublicKey || !signingPublicKey) {
-    json(res, 400, { error: "username, strong password, and both public keys are required" });
+    json(req, res, 400, { error: "username, strong password, and both public keys are required" });
     return;
   }
 
-  const users = readJson(USERS_FILE);
-  if (users.some((u) => u.username === username)) {
-    json(res, 409, { error: "Username already exists" });
+  const existing = await supabaseRequest("GET", `task1_users?username=eq.${encodeURIComponent(username)}&select=username`);
+  if (Array.isArray(existing) && existing.length > 0) {
+    json(req, res, 409, { error: "Username already exists" });
     return;
   }
 
   const saltB64 = crypto.randomBytes(16).toString("base64");
   const passwordHash = hashPassword(password, saltB64);
-  users.push({
+  await supabaseRequest("POST", "task1_users", {
     username,
-    password: {
-      algorithm: HASH_CONFIG.algorithm,
-      iterations: HASH_CONFIG.iterations,
-      salt: saltB64,
-      hash: passwordHash,
-    },
-    keys: {
-      e2eePublicKey,
-      signingPublicKey,
-    },
-    createdAt: new Date().toISOString(),
+    password_algorithm: HASH_CONFIG.algorithm,
+    password_iterations: HASH_CONFIG.iterations,
+    password_salt_b64: saltB64,
+    password_hash_b64: passwordHash,
+    e2ee_public_key: e2eePublicKey,
+    signing_public_key: signingPublicKey,
   });
-  writeJson(USERS_FILE, users);
-  json(res, 201, { ok: true, username });
+  json(req, res, 201, { ok: true, username });
 }
 
 async function handleLogin(req, res) {
   const body = await parseJsonBody(req);
   const username = normalizeUsername(body.username);
   const password = String(body.password || "");
-  const users = readJson(USERS_FILE);
-  const user = users.find((u) => u.username === username);
-  if (!user) {
-    json(res, 401, { error: "Invalid credentials" });
+  const rows = await supabaseRequest(
+    "GET",
+    `task1_users?username=eq.${encodeURIComponent(
+      username
+    )}&select=username,password_salt_b64,password_hash_b64,password_iterations`
+  );
+  const user = Array.isArray(rows) ? rows[0] : null;
+  if (!user || !user.password_salt_b64 || !user.password_hash_b64) {
+    json(req, res, 401, { error: "Invalid credentials" });
     return;
   }
 
-  const computedHash = hashPassword(password, user.password.salt);
+  const computedHash = hashPassword(password, user.password_salt_b64);
   const valid =
-    computedHash.length === user.password.hash.length &&
-    crypto.timingSafeEqual(Buffer.from(computedHash), Buffer.from(user.password.hash));
+    computedHash.length === String(user.password_hash_b64).length &&
+    crypto.timingSafeEqual(Buffer.from(computedHash), Buffer.from(String(user.password_hash_b64)));
   if (!valid) {
-    json(res, 401, { error: "Invalid credentials" });
+    json(req, res, 401, { error: "Invalid credentials" });
     return;
   }
 
   const token = createToken(username);
-  json(res, 200, { token, username });
+  json(req, res, 200, { token, username });
 }
 
-function handleGetPublicKeys(req, res, urlObj) {
+async function handleGetPublicKeys(req, res, urlObj) {
   const username = normalizeUsername(urlObj.searchParams.get("username"));
   if (!username) {
-    json(res, 400, { error: "username is required" });
+    json(req, res, 400, { error: "username is required" });
     return;
   }
-  const users = readJson(USERS_FILE);
-  const user = users.find((u) => u.username === username);
+  const rows = await supabaseRequest(
+    "GET",
+    `task1_users?username=eq.${encodeURIComponent(username)}&select=username,e2ee_public_key,signing_public_key`
+  );
+  const user = Array.isArray(rows) ? rows[0] : null;
   if (!user) {
-    json(res, 404, { error: "User not found" });
+    json(req, res, 404, { error: "User not found" });
     return;
   }
-  json(res, 200, {
-    username: user.username,
-    keys: user.keys,
+  json(req, res, 200, {
+    username: String(user.username),
+    keys: {
+      e2eePublicKey: String(user.e2ee_public_key || ""),
+      signingPublicKey: String(user.signing_public_key || ""),
+    },
   });
 }
 
@@ -192,38 +220,49 @@ async function handleSendMessage(req, res, sender) {
   const to = normalizeUsername(body.to);
   const envelope = body.envelope;
   if (!to || !envelope || typeof envelope !== "object") {
-    json(res, 400, { error: "to and envelope are required" });
+    json(req, res, 400, { error: "to and envelope are required" });
     return;
   }
 
-  const users = readJson(USERS_FILE);
-  const recipient = users.find((u) => u.username === to);
+  const recipientRows = await supabaseRequest(
+    "GET",
+    `task1_users?username=eq.${encodeURIComponent(to)}&select=username`
+  );
+  const recipient = Array.isArray(recipientRows) ? recipientRows[0] : null;
   if (!recipient) {
-    json(res, 404, { error: "Recipient not found" });
+    json(req, res, 404, { error: "Recipient not found" });
     return;
   }
 
-  const messages = readJson(MESSAGES_FILE);
-  const message = {
-    id: crypto.randomUUID(),
+  const inserted = await supabaseRequest("POST", "task1_messages", {
     from: sender,
     to,
-    envelope,
-    createdAt: new Date().toISOString(),
-  };
-  messages.push(message);
-  writeJson(MESSAGES_FILE, messages);
-  json(res, 201, { ok: true, id: message.id });
+    envelope_json: envelope,
+  });
+  const row = Array.isArray(inserted) ? inserted[0] : null;
+  json(req, res, 201, { ok: true, id: row?.id || null });
 }
 
-function handleReceiveMessages(req, res, username) {
-  const messages = readJson(MESSAGES_FILE).filter((m) => m.to === username);
-  json(res, 200, { messages });
+async function handleReceiveMessages(req, res, username) {
+  const rows = await supabaseRequest(
+    "GET",
+    `task1_messages?to=eq.${encodeURIComponent(
+      username
+    )}&select=id,from,to,envelope_json,created_at&order=created_at.asc`
+  );
+  const messages = (Array.isArray(rows) ? rows : []).map((r) => ({
+    id: r.id,
+    from: r.from,
+    to: r.to,
+    envelope: r.envelope_json,
+    createdAt: r.created_at,
+  }));
+  json(req, res, 200, { messages });
 }
 
 function handleTlsInfo(res, req) {
   const tlsSocket = req.socket;
-  json(res, 200, {
+  json(req, res, 200, {
     protocol: tlsSocket.getProtocol(),
     cipher: tlsSocket.getCipher(),
     minSupported: "TLSv1.2",
@@ -232,14 +271,17 @@ function handleTlsInfo(res, req) {
 }
 
 async function main() {
-  ensureDataFiles();
-
   const server = https.createServer(TLS_OPTIONS, async (req, res) => {
     try {
       const urlObj = new URL(req.url, `https://${req.headers.host}`);
+      if (req.method === "OPTIONS") {
+        res.writeHead(204, corsHeaders(req));
+        res.end();
+        return;
+      }
 
       if (req.method === "GET" && urlObj.pathname === "/health") {
-        json(res, 200, { ok: true });
+        json(req, res, 200, { ok: true, backend: "supabase" });
         return;
       }
       if (req.method === "GET" && urlObj.pathname === "/tls-info") {
@@ -255,17 +297,17 @@ async function main() {
         return;
       }
       if (req.method === "GET" && urlObj.pathname === "/public-keys") {
-        handleGetPublicKeys(req, res, urlObj);
+        await handleGetPublicKeys(req, res, urlObj);
         return;
       }
       if (urlObj.pathname === "/messages") {
         const username = authenticate(req);
         if (!username) {
-          json(res, 401, { error: "Unauthorized" });
+          json(req, res, 401, { error: "Unauthorized" });
           return;
         }
         if (req.method === "GET") {
-          handleReceiveMessages(req, res, username);
+          await handleReceiveMessages(req, res, username);
           return;
         }
         if (req.method === "POST") {
@@ -274,9 +316,9 @@ async function main() {
         }
       }
 
-      routeNotFound(res);
+      routeNotFound(req, res);
     } catch (error) {
-      json(res, 500, { error: error.message || "Unexpected error" });
+      json(req, res, 500, { error: error.message || "Unexpected error" });
     }
   });
 
