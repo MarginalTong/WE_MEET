@@ -68,80 +68,15 @@
           <header class="page-hero">
             <p class="page-hero__eyebrow">Collaboration</p>
             <h1 class="page-hero__title">Turn timetable screenshots into a shared grid</h1>
-            <p class="page-hero__lead">
-              Upload a schedule screenshot; AI parses and merges with the cloud. Use <strong>Timetable view</strong> for
-              occupancy and <strong>Free slots &amp; votes</strong> to propose times (voting UI is a preview; backend can
-              be wired later).
-            </p>
           </header>
 
-          <section class="card card--elevated panel" hidden>
-            <div class="panel-head">
-              <h2>Supabase</h2>
+          <div class="auth-bar">
+            <div class="auth-bar__left">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span id="authBarStatus" class="auth-bar__status">Not signed in</span>
             </div>
-            <p class="desc">
-              Default project credentials load automatically; you usually do not need to edit them. Change them only if
-              you use another project, then click <strong>Save settings</strong>.
-            </p>
-            <div class="field">
-              <label for="supabaseUrl">Supabase URL</label>
-              <input id="supabaseUrl" type="text" autocomplete="off" />
-            </div>
-            <div class="field">
-              <label for="supabaseAnonKey">Supabase anon key</label>
-              <input id="supabaseAnonKey" type="text" autocomplete="off" />
-            </div>
-            <div class="field">
-              <label for="aiApiUrl">AI proxy URL</label>
-              <input id="aiApiUrl" type="text" autocomplete="off" />
-            </div>
-            <div class="actions">
-              <button id="saveConfigBtn" class="btn btn-primary" type="button">Save settings</button>
-            </div>
-          </section>
-
-          <section class="card card--elevated panel">
-            <div class="panel-head">
-              <h2>Sign in &amp; shared timetable</h2>
-            </div>
-            <div class="field">
-              <label for="emailInput">Email (magic link)</label>
-              <input id="emailInput" type="email" placeholder="you@example.com" autocomplete="email" />
-            </div>
-            <div class="actions actions-wrap">
-              <button id="sendMagicBtn" class="btn btn-primary" type="button">Send magic link</button>
-              <button id="googleSignInBtn" class="btn btn-secondary" type="button">Google sign-in</button>
-            </div>
-            <p class="status status-inline" style="margin-top: 0.75rem; font-weight: 600">Secure server login (Task 1 · TLS + PBKDF2)</p>
-            <input id="task1ServerUrl" type="hidden" value="https://wemeet-production.up.railway.app" />
-            <input id="registerUsernameBtn" type="hidden" />
-            <input id="loginUsernameBtn" type="hidden" />
-            <div class="field">
-              <label for="usernameInput">Username</label>
-              <input id="usernameInput" type="text" placeholder="Any username" autocomplete="username" />
-            </div>
-            <div class="field">
-              <label for="userCodeInput">Password</label>
-              <input id="userCodeInput" type="password" placeholder="At least 10 characters" autocomplete="new-password" />
-            </div>
-            <div class="actions actions-wrap">
-              <button id="task1RegisterBtn" class="btn btn-secondary" type="button">Register</button>
-              <button id="task1SignInBtn" class="btn btn-primary" type="button">Sign in</button>
-            </div>
-            <div class="actions actions-wrap">
-              <button id="signOutBtn" class="btn btn-ghost" type="button">Sign out</button>
-            </div>
-            <p id="authStatus" class="status status-inline">Signed out</p>
-            <div class="field">
-              <label for="shareCodeInput">Cloud share code (signed in)</label>
-              <input id="shareCodeInput" type="text" placeholder="Enter code to join a timetable" />
-            </div>
-            <div class="actions actions-wrap">
-              <button id="createTimetableBtn" class="btn btn-primary" type="button">Create cloud timetable</button>
-              <button id="joinTimetableBtn" class="btn btn-primary" type="button">Join timetable</button>
-            </div>
-            <p id="timetableStatus" class="status status-inline">No timetable selected</p>
-          </section>
+            <button id="authBarBtn" class="btn btn-primary btn--sm" type="button">Sign in</button>
+          </div>
 
           <section class="card card--elevated panel panel--accent">
             <div class="panel-head">
@@ -268,5 +203,70 @@
       })();
     </script>
     <script type="module" src="./app.js"></script>
+
+    <!-- Sign-in modal (body-level so position:fixed works correctly) -->
+    <div id="authModal" class="auth-modal" hidden role="dialog" aria-modal="true" aria-label="Sign in">
+      <div class="auth-modal__backdrop" id="authModalBackdrop"></div>
+      <div class="auth-modal__dialog">
+        <button class="auth-modal__close" id="authModalClose" type="button" aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+
+        <!-- Signed-out: login forms -->
+        <div id="authModalLogin">
+          <h2 class="auth-modal__title">Sign in</h2>
+          <div class="field">
+            <label for="emailInput">Email</label>
+            <input id="emailInput" type="email" placeholder="you@example.com" autocomplete="email" />
+          </div>
+          <div class="actions actions-wrap">
+            <button id="sendMagicBtn" class="btn btn-primary" type="button">Send magic link</button>
+            <button id="googleSignInBtn" class="btn btn-secondary" type="button">Google</button>
+          </div>
+          <div class="auth-modal__divider"><span>or</span></div>
+          <p class="auth-modal__section-label">Secure login (TLS + PBKDF2)</p>
+          <div class="field">
+            <label for="usernameInput">Username</label>
+            <input id="usernameInput" type="text" placeholder="Any username" autocomplete="username" />
+          </div>
+          <div class="field">
+            <label for="userCodeInput">Password</label>
+            <input id="userCodeInput" type="password" placeholder="At least 10 characters" autocomplete="new-password" />
+          </div>
+          <div class="actions actions-wrap">
+            <button id="task1RegisterBtn" class="btn btn-secondary" type="button">Register</button>
+            <button id="task1SignInBtn" class="btn btn-primary" type="button">Sign in</button>
+          </div>
+        </div>
+
+        <!-- Signed-in: timetable controls -->
+        <div id="authModalAccount" hidden>
+          <h2 class="auth-modal__title">Cloud sync</h2>
+          <div class="field">
+            <label for="shareCodeInput">Share code</label>
+            <input id="shareCodeInput" type="text" placeholder="Enter code to join a timetable" />
+          </div>
+          <div class="actions actions-wrap">
+            <button id="createTimetableBtn" class="btn btn-primary" type="button">Create timetable</button>
+            <button id="joinTimetableBtn" class="btn btn-primary" type="button">Join</button>
+          </div>
+          <p id="timetableStatus" class="status status-inline">No timetable selected</p>
+          <div class="actions" style="margin-top:14px">
+            <button id="signOutBtn" class="btn btn-ghost" type="button">Sign out</button>
+          </div>
+        </div>
+
+        <p id="authStatus" class="status status-inline" style="margin-top:12px">Signed out</p>
+
+        <!-- Hidden compat inputs -->
+        <input id="task1ServerUrl" type="hidden" value="https://wemeet-production.up.railway.app" />
+        <input id="registerUsernameBtn" type="hidden" />
+        <input id="loginUsernameBtn" type="hidden" />
+        <input id="supabaseUrl" type="hidden" />
+        <input id="supabaseAnonKey" type="hidden" />
+        <input id="aiApiUrl" type="hidden" />
+        <button id="saveConfigBtn" type="button" hidden></button>
+      </div>
+    </div>
   </body>
 </html>

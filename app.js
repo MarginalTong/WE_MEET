@@ -26,6 +26,11 @@ const googleSignInBtn = document.getElementById("googleSignInBtn");
 const task1ServerUrlInput = document.getElementById("task1ServerUrl");
 const task1SignInBtn = document.getElementById("task1SignInBtn");
 const task1RegisterBtn = document.getElementById("task1RegisterBtn");
+const authModal = document.getElementById("authModal");
+const authModalLogin = document.getElementById("authModalLogin");
+const authModalAccount = document.getElementById("authModalAccount");
+const authBarStatus = document.getElementById("authBarStatus");
+const authBarBtn = document.getElementById("authBarBtn");
 
 /** Canonical weekday keys (must match DB / AI output). */
 const DAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
@@ -181,11 +186,6 @@ function encodeUsernameForAuthLocal(username) {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-function usernameToAuthEmail(username) {
-  const local = encodeUsernameForAuthLocal(username);
-  return `${USERNAME_AUTH_EMAIL_PREFIX}${local}@${getSupabaseProjectHost()}`;
-}
-
 /** All internal auth emails ever used for this username (for login fallback). */
 function listUsernameAuthEmails(username) {
   const local = encodeUsernameForAuthLocal(username);
@@ -266,11 +266,34 @@ async function afterAuthSessionReady() {
     setupRealtime();
   }
   updateSharingUi();
+  updateAuthBar();
+  closeAuthModal();
 }
 
 function setStatus(text, isError = false) {
   statusEl.textContent = text;
   statusEl.style.color = isError ? "#b91c1c" : "#4b5563";
+}
+
+function openAuthModal() {
+  authModal?.classList.add("is-open");
+}
+
+function closeAuthModal() {
+  authModal?.classList.remove("is-open");
+}
+
+function updateAuthBar() {
+  const signedIn = Boolean(currentUser);
+  if (authBarStatus) {
+    authBarStatus.textContent = signedIn ? formatSignedInLabel(currentUser) : "Not signed in";
+    authBarStatus.className = "auth-bar__status" + (signedIn ? " auth-bar__status--signed-in" : "");
+  }
+  if (authBarBtn) {
+    authBarBtn.textContent = signedIn ? "Account" : "Sign in";
+  }
+  if (authModalLogin) authModalLogin.hidden = signedIn;
+  if (authModalAccount) authModalAccount.hidden = !signedIn;
 }
 
 function setAuthStatus(text, isError = false) {
@@ -795,10 +818,12 @@ async function initSupabase() {
   }
   currentUser = data.session?.user || null;
   setAuthStatus(formatSignedInLabel(currentUser));
+  updateAuthBar();
   const { data: authData } = supabase.auth.onAuthStateChange(async (_event, session) => {
     currentUser = session?.user || null;
     setAuthStatus(formatSignedInLabel(currentUser));
     updateSharingUi();
+    updateAuthBar();
     if (currentUser && getValidCloudTimetableId()) {
       await loadEventsAndRender();
       setupRealtime();
@@ -943,8 +968,10 @@ async function signOut() {
     localStorage.removeItem(STORAGE_KEYS.timetableId);
   }
   setTimetableStatus("No cloud timetable selected");
+  currentUser = null;
   await loadEventsAndRender();
   updateSharingUi();
+  updateAuthBar();
 }
 
 async function signInWithGoogle() {
@@ -1127,6 +1154,9 @@ task1SignInBtn?.addEventListener("click", task1Login);
 googleSignInBtn?.addEventListener("click", () => {
   signInWithGoogle();
 });
+authBarBtn?.addEventListener("click", openAuthModal);
+document.getElementById("authModalClose")?.addEventListener("click", closeAuthModal);
+document.getElementById("authModalBackdrop")?.addEventListener("click", closeAuthModal);
 downloadBtn.addEventListener("click", () => {
   if (!currentRows.length) {
     return;
