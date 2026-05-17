@@ -116,61 +116,24 @@
           <header class="page-hero page-hero--compact">
             <p class="page-hero__eyebrow">Scheduling</p>
             <h1 class="page-hero__title">Free slots &amp; voting</h1>
-            <p class="page-hero__lead">
-              UI preview: suggest times from everyone’s overlap; members vote. Connect to Supabase when you are ready.
-            </p>
+            <p class="page-hero__lead">Searches the shared timetable for times everyone is free. Load a cloud timetable first.</p>
           </header>
 
           <section class="card card--elevated meet-section">
-            <h2 class="meet-section__title">Suggested free slots (sample)</h2>
-            <p class="meet-section__sub">Static preview — not tied to live timetable data; for layout and copy only.</p>
-            <ul class="slot-cards">
-              <li class="slot-card slot-card--hot">
-                <div class="slot-card__time">Fri · 18:00 — 19:30</div>
-                <div class="slot-card__meta">3 people free · 92% match</div>
-                <div class="slot-card__votes">
-                  <span class="vote-pill vote-pill--yes">4 votes</span>
-                  <span class="vote-pill vote-pill--maybe">1 maybe</span>
+            <h2 class="meet-section__title">Find a meeting time</h2>
+            <div class="meet-controls">
+              <div class="meet-controls__row">
+                <span class="meet-controls__label">Duration</span>
+                <div class="dur-chips" id="durationChips">
+                  <button class="dur-chip dur-chip--active" data-mins="30" type="button">30 min</button>
+                  <button class="dur-chip" data-mins="60" type="button">1 hour</button>
+                  <button class="dur-chip" data-mins="90" type="button">1.5 hours</button>
+                  <button class="dur-chip" data-mins="120" type="button">2 hours</button>
                 </div>
-                <button type="button" class="btn btn-accent btn--sm" disabled>Vote for this (preview)</button>
-              </li>
-              <li class="slot-card">
-                <div class="slot-card__time">Sat · 10:00 — 11:30</div>
-                <div class="slot-card__meta">2 people free · 78% match</div>
-                <div class="slot-card__votes">
-                  <span class="vote-pill vote-pill--yes">2 votes</span>
-                </div>
-                <button type="button" class="btn btn-secondary btn--sm" disabled>Vote (preview)</button>
-              </li>
-              <li class="slot-card">
-                <div class="slot-card__time">Sun · 14:00 — 16:00</div>
-                <div class="slot-card__meta">Long discussion / can split</div>
-                <div class="slot-card__votes">
-                  <span class="vote-pill vote-pill--maybe">In discussion</span>
-                </div>
-                <button type="button" class="btn btn-secondary btn--sm" disabled>Vote (preview)</button>
-              </li>
-            </ul>
-          </section>
-
-          <section class="card card--elevated meet-section meet-section--poll">
-            <h2 class="meet-section__title">Start a new time poll</h2>
-            <p class="meet-section__sub">Pick candidate weekdays and a rough window; confirm to notify members (placeholder).</p>
-            <div class="poll-grid">
-              <div class="poll-days">
-                <span class="poll-chip">Mon</span>
-                <span class="poll-chip poll-chip--on">Wed</span>
-                <span class="poll-chip">Fri</span>
-                <span class="poll-chip poll-chip--on">Sat</span>
               </div>
-              <div class="field">
-                <label>Time window (sample)</label>
-                <input type="text" class="input--ghost" value="15:00 — 20:00" readonly />
-              </div>
+              <button id="findSlotsBtn" class="btn btn-accent" type="button">Find free slots</button>
             </div>
-            <div class="actions">
-              <button type="button" class="btn btn-primary" disabled>Create poll (coming soon)</button>
-            </div>
+            <div id="slotsResult" class="slots-result"></div>
           </section>
         </div>
       </div>

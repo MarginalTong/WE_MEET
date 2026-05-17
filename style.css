@@ -609,6 +609,91 @@ button {
   border-color: rgba(232, 165, 75, 0.4);
 }
 
+/* —— Meet controls —— */
+.meet-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.meet-controls__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.meet-controls__label {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.dur-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dur-chip {
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border: 1px solid var(--line);
+  background: #f4f3f0;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.dur-chip:hover {
+  background: var(--line);
+  color: var(--ink);
+}
+
+.dur-chip--active {
+  background: var(--accent-dim);
+  color: #92400e;
+  border-color: rgba(232, 165, 75, 0.45);
+}
+
+.slots-result {
+  margin-top: 4px;
+}
+
+.meet-empty {
+  padding: 20px 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.slot-card__vote-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.slot-vote-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.slot-vote-bar__fill {
+  height: 100%;
+  background: var(--teal);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
 /* —— Auth bar —— */
 .auth-bar {
   display: flex;

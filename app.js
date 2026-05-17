@@ -1157,6 +1157,113 @@ googleSignInBtn?.addEventListener("click", () => {
 authBarBtn?.addEventListener("click", openAuthModal);
 document.getElementById("authModalClose")?.addEventListener("click", closeAuthModal);
 document.getElementById("authModalBackdrop")?.addEventListener("click", closeAuthModal);
+
+// —— Free slots & voting ——
+
+let meetingDurationMins = 30;
+let voteData = (() => {
+  try { return JSON.parse(localStorage.getItem("we_meet_votes") || "{}"); } catch { return {}; }
+})();
+
+function saveVotes() {
+  localStorage.setItem("we_meet_votes", JSON.stringify(voteData));
+}
+
+function findFreeSlots(rows, durationMins) {
+  if (!rows || rows.length < 2) return [];
+  const numSlots = Math.ceil(durationMins / 30);
+  const results = [];
+  const dayOrder = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+
+  DAY_HEADERS_EN.forEach((day, dayIndex) => {
+    const col = dayIndex + 1;
+    let runStart = -1;
+    let perDay = 0;
+
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i][col] === "available") {
+        if (runStart === -1) runStart = i;
+        const runLen = i - runStart + 1;
+        if (runLen >= numSlots && perDay < 3) {
+          const startTime = rows[runStart][0].split("-")[0];
+          const startMin = parseTimeToMinutes(startTime);
+          const endMin = startMin + durationMins;
+          const endTime = `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
+          results.push({ day, startTime, endTime, order: dayOrder[day] });
+          perDay++;
+          // Advance runStart to start of next non-overlapping window
+          runStart = i + 1;
+        }
+      } else {
+        runStart = -1;
+      }
+    }
+  });
+
+  results.sort((a, b) => a.order - b.order || a.startTime.localeCompare(b.startTime));
+  return results;
+}
+
+function renderSlots(slots) {
+  const container = document.getElementById("slotsResult");
+  if (!container) return;
+
+  if (!slots.length) {
+    container.innerHTML = '<p class="meet-empty">No common free slots found for this duration.<br>Try a shorter meeting or upload more schedules.</p>';
+    return;
+  }
+
+  const tid = currentTimetableId || "local";
+  const maxVotes = Math.max(1, ...slots.map(s => (voteData[`${tid}:${s.day}:${s.startTime}`]?.count || 0)));
+
+  const items = slots.map(slot => {
+    const key = `${tid}:${slot.day}:${slot.startTime}`;
+    const v = voteData[key] || { count: 0, myVote: false };
+    const pct = Math.round((v.count / maxVotes) * 100);
+    const hot = v.count > 0 && pct === 100;
+    return `<li class="slot-card ${hot ? "slot-card--hot" : ""}" data-key="${key}">
+      <div class="slot-card__time">${slot.day} · ${slot.startTime} — ${slot.endTime}</div>
+      <div class="slot-card__vote-row">
+        <div class="slot-vote-bar"><div class="slot-vote-bar__fill" style="width:${pct}%"></div></div>
+        <span class="slot-card__meta" style="margin:0;white-space:nowrap">${v.count} vote${v.count !== 1 ? "s" : ""}</span>
+        <button type="button" class="btn ${v.myVote ? "btn-accent" : "btn-secondary"} btn--sm slot-vote-btn" data-key="${key}">
+          ${v.myVote ? "✓ Voted" : "Vote"}
+        </button>
+      </div>
+    </li>`;
+  }).join("");
+
+  container.innerHTML = `<ul class="slot-cards">${items}</ul>`;
+
+  container.querySelectorAll(".slot-vote-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.key;
+      const v = voteData[key] || { count: 0, myVote: false };
+      voteData[key] = { count: v.myVote ? Math.max(0, v.count - 1) : v.count + 1, myVote: !v.myVote };
+      saveVotes();
+      renderSlots(slots);
+    });
+  });
+}
+
+// Duration chip selection
+document.getElementById("durationChips")?.addEventListener("click", (e) => {
+  const chip = e.target.closest(".dur-chip");
+  if (!chip) return;
+  document.querySelectorAll(".dur-chip").forEach(c => c.classList.remove("dur-chip--active"));
+  chip.classList.add("dur-chip--active");
+  meetingDurationMins = Number(chip.dataset.mins);
+});
+
+document.getElementById("findSlotsBtn")?.addEventListener("click", () => {
+  if (currentRows.length < 2) {
+    const container = document.getElementById("slotsResult");
+    if (container) container.innerHTML = '<p class="meet-empty">No timetable data loaded yet.<br>Upload a schedule or load a cloud timetable first.</p>';
+    return;
+  }
+  const slots = findFreeSlots(currentRows, meetingDurationMins);
+  renderSlots(slots);
+});
 downloadBtn.addEventListener("click", () => {
   if (!currentRows.length) {
     return;
