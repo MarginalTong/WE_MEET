@@ -82,9 +82,11 @@
             <div class="panel-head">
               <h2>Upload timetable image</h2>
             </div>
-            <div class="field field-file">
-              <label for="imageInput" class="file-label">Choose screenshot</label>
-              <input id="imageInput" type="file" accept="image/*" />
+            <div class="drop-zone" id="dropZone">
+              <input id="imageInput" type="file" accept="image/*" class="drop-zone__input" />
+              <p class="drop-zone__primary">Drag &amp; drop your screenshot here</p>
+              <p class="drop-zone__secondary">or <label for="imageInput" class="drop-zone__link">choose a file</label></p>
+              <p class="drop-zone__filename" id="dropZoneFilename" hidden></p>
             </div>
             <div class="actions actions-wrap">
               <button id="recognizeBtn" class="btn btn-accent" type="button">Recognize &amp; update</button>

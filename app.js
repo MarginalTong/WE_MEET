@@ -1131,6 +1131,47 @@ async function task1Login() {
   }
 }
 
+// —— Drop zone ——
+const dropZone = document.getElementById("dropZone");
+const dropZoneFilename = document.getElementById("dropZoneFilename");
+
+function setDropFile(file) {
+  if (!file || !file.type.startsWith("image/")) return;
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  imageInput.files = dt.files;
+  if (dropZoneFilename) {
+    dropZoneFilename.textContent = file.name;
+    dropZoneFilename.hidden = false;
+  }
+}
+
+imageInput.addEventListener("change", () => {
+  const file = imageInput.files?.[0];
+  if (file && dropZoneFilename) {
+    dropZoneFilename.textContent = file.name;
+    dropZoneFilename.hidden = false;
+  }
+});
+
+dropZone?.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  dropZone.classList.add("drop-zone--over");
+});
+
+dropZone?.addEventListener("dragleave", (e) => {
+  if (!dropZone.contains(e.relatedTarget)) {
+    dropZone.classList.remove("drop-zone--over");
+  }
+});
+
+dropZone?.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropZone.classList.remove("drop-zone--over");
+  const file = e.dataTransfer.files?.[0];
+  if (file) setDropFile(file);
+});
+
 recognizeBtn.addEventListener("click", recognizeImage);
 saveConfigBtn.addEventListener("click", async () => {
   const ok = await initSupabase();

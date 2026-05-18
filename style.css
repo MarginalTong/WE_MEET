@@ -609,6 +609,67 @@ button {
   border-color: rgba(232, 165, 75, 0.4);
 }
 
+/* —— Drop zone —— */
+.drop-zone {
+  position: relative;
+  border: 2px dashed rgba(232, 165, 75, 0.5);
+  border-radius: var(--radius);
+  padding: 40px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  background: rgba(232, 165, 75, 0.03);
+  margin-bottom: 14px;
+}
+
+.drop-zone:hover,
+.drop-zone--over {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.drop-zone__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 0; /* hide "no file chosen" text */
+}
+
+.drop-zone__primary {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+  pointer-events: none;
+}
+
+.drop-zone__secondary {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.drop-zone__link {
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+  pointer-events: auto;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.drop-zone__filename {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--teal);
+  pointer-events: none;
+}
+
 /* —— Meet controls —— */
 .meet-controls {
   display: flex;
