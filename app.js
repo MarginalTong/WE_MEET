@@ -119,6 +119,190 @@ if (
   localStorage.removeItem(STORAGE_KEYS.timetableId);
 }
 let realtimeChannel = null;
+let task1Token = localStorage.getItem("wemeet_task1_token") || "";
+let task1Username = localStorage.getItem("wemeet_task1_username") || "";
+
+// ── E2EE (Web Crypto API) ─────────────────────────────────────────────────
+
+function uint8ToPem(bytes, type) {
+  const b64 = btoa(String.fromCharCode(...bytes));
+  return `-----BEGIN ${type}-----\n${b64.match(/.{1,64}/g).join("\n")}\n-----END ${type}-----\n`;
+}
+
+function pemToUint8(pem) {
+  const b64 = pem.replace(/-----[^-]+-----/g, "").replace(/\s/g, "");
+  return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+}
+
+async function getOrCreateE2eeIdentity(username) {
+  const raw = localStorage.getItem("wemeet_task1_e2ee");
+  if (raw) {
+    try {
+      const id = JSON.parse(raw);
+      if (id.username === username) return id;
+    } catch { /* regenerate */ }
+  }
+  const [e2eeKP, sigKP] = await Promise.all([
+    crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveKey", "deriveBits"]),
+    crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]),
+  ]);
+  const [e2eePrivDer, e2eePublDer, sigPrivDer, sigPublDer] = await Promise.all([
+    crypto.subtle.exportKey("pkcs8", e2eeKP.privateKey),
+    crypto.subtle.exportKey("spki",  e2eeKP.publicKey),
+    crypto.subtle.exportKey("pkcs8", sigKP.privateKey),
+    crypto.subtle.exportKey("spki",  sigKP.publicKey),
+  ]);
+  const identity = {
+    username,
+    e2eePrivPem: uint8ToPem(new Uint8Array(e2eePrivDer), "PRIVATE KEY"),
+    e2eePublPem: uint8ToPem(new Uint8Array(e2eePublDer), "PUBLIC KEY"),
+    sigPrivPem:  uint8ToPem(new Uint8Array(sigPrivDer),  "PRIVATE KEY"),
+    sigPublPem:  uint8ToPem(new Uint8Array(sigPublDer),  "PUBLIC KEY"),
+  };
+  localStorage.setItem("wemeet_task1_e2ee", JSON.stringify(identity));
+  return identity;
+}
+
+async function e2eeEncrypt(senderIdentity, recipientE2eePem, plaintext) {
+  const toB64 = u8 => btoa(String.fromCharCode(...u8));
+  const ephKP = await crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveKey", "deriveBits"]);
+  const recipPub = await crypto.subtle.importKey("spki", pemToUint8(recipientE2eePem), { name: "X25519" }, true, []);
+  const sharedBits = await crypto.subtle.deriveBits({ name: "X25519", public: recipPub }, ephKP.privateKey, 256);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const hkdfKey = await crypto.subtle.importKey("raw", sharedBits, "HKDF", false, ["deriveKey"]);
+  const aesKey = await crypto.subtle.deriveKey(
+    { name: "HKDF", hash: "SHA-256", salt, info: new TextEncoder().encode("we-meet-task1-e2ee") },
+    hkdfKey, { name: "AES-GCM", length: 256 }, false, ["encrypt"]
+  );
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipherBuf = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, new TextEncoder().encode(plaintext));
+  const cipherBytes = new Uint8Array(cipherBuf);
+  const ephPublDer = await crypto.subtle.exportKey("spki", ephKP.publicKey);
+  const envelopeToSign = {
+    e2eeVersion: "x25519-hkdf-aes-256-gcm-v1",
+    ephPublicKeyPem: uint8ToPem(new Uint8Array(ephPublDer), "PUBLIC KEY"),
+    saltB64:       toB64(salt),
+    ivB64:         toB64(iv),
+    cipherTextB64: toB64(cipherBytes.slice(0, -16)),
+    authTagB64:    toB64(cipherBytes.slice(-16)),
+  };
+  const sigPriv = await crypto.subtle.importKey("pkcs8", pemToUint8(senderIdentity.sigPrivPem), { name: "Ed25519" }, true, ["sign"]);
+  const sig = await crypto.subtle.sign({ name: "Ed25519" }, sigPriv, new TextEncoder().encode(JSON.stringify(envelopeToSign)));
+  return { ...envelopeToSign, signatureB64: toB64(new Uint8Array(sig)), senderSigningPublicKeyPem: senderIdentity.sigPublPem };
+}
+
+async function e2eeDecrypt(recipientIdentity, envelope) {
+  const fromB64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  const signedEnvelope = {
+    e2eeVersion: envelope.e2eeVersion, ephPublicKeyPem: envelope.ephPublicKeyPem,
+    saltB64: envelope.saltB64, ivB64: envelope.ivB64,
+    cipherTextB64: envelope.cipherTextB64, authTagB64: envelope.authTagB64,
+  };
+  const senderSigPub = await crypto.subtle.importKey("spki", pemToUint8(envelope.senderSigningPublicKeyPem), { name: "Ed25519" }, true, ["verify"]);
+  const valid = await crypto.subtle.verify({ name: "Ed25519" }, senderSigPub, fromB64(envelope.signatureB64), new TextEncoder().encode(JSON.stringify(signedEnvelope)));
+  if (!valid) throw new Error("Signature verification failed");
+  const ephPub = await crypto.subtle.importKey("spki", pemToUint8(envelope.ephPublicKeyPem), { name: "X25519" }, true, []);
+  const recipPriv = await crypto.subtle.importKey("pkcs8", pemToUint8(recipientIdentity.e2eePrivPem), { name: "X25519" }, true, ["deriveKey", "deriveBits"]);
+  const sharedBits = await crypto.subtle.deriveBits({ name: "X25519", public: ephPub }, recipPriv, 256);
+  const salt = fromB64(envelope.saltB64);
+  const hkdfKey = await crypto.subtle.importKey("raw", sharedBits, "HKDF", false, ["deriveKey"]);
+  const aesKey = await crypto.subtle.deriveKey(
+    { name: "HKDF", hash: "SHA-256", salt, info: new TextEncoder().encode("we-meet-task1-e2ee") },
+    hkdfKey, { name: "AES-GCM", length: 256 }, false, ["decrypt"]
+  );
+  const iv = fromB64(envelope.ivB64);
+  const cipherText = fromB64(envelope.cipherTextB64);
+  const authTag = fromB64(envelope.authTagB64);
+  const combined = new Uint8Array(cipherText.length + authTag.length);
+  combined.set(cipherText); combined.set(authTag, cipherText.length);
+  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, aesKey, combined);
+  return new TextDecoder().decode(plain);
+}
+
+// ── Chat UI ────────────────────────────────────────────────────────────────
+
+function updateChatSection() {
+  const section = document.getElementById("chatSection");
+  if (section) section.hidden = !task1Token;
+}
+
+function setChatStatus(msg, isError = false) {
+  const el = document.getElementById("chatStatus");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = `status status-inline${isError ? " status--error" : ""}`;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function renderChatMessages(messages) {
+  const container = document.getElementById("chatMessages");
+  if (!container) return;
+  if (!messages.length) {
+    container.innerHTML = '<p class="chat-empty">No messages yet</p>';
+    return;
+  }
+  container.innerHTML = messages.map(m => `
+    <div class="chat-msg${m.ok ? "" : " chat-msg--error"}">
+      <span class="chat-msg__meta">${escapeHtml(m.from)} → ${escapeHtml(m.to)} · ${new Date(m.time).toLocaleTimeString()}</span>
+      <span class="chat-msg__lock" title="End-to-end encrypted">🔒</span>
+      <p class="chat-msg__text">${escapeHtml(m.text)}</p>
+    </div>
+  `).join("");
+}
+
+async function chatLoadInbox() {
+  if (!task1Token || !task1Username) { setChatStatus("Sign in via the secure server first", true); return; }
+  setChatStatus("Loading…");
+  try {
+    const res = await fetch(`${getTask1BaseUrl()}/messages`, { headers: { Authorization: `Bearer ${task1Token}` } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    const identity = await getOrCreateE2eeIdentity(task1Username);
+    const messages = await Promise.all((data.messages || []).map(async m => {
+      try {
+        const text = await e2eeDecrypt(identity, m.envelope);
+        return { from: m.from, to: m.to, text, time: m.createdAt, ok: true };
+      } catch {
+        return { from: m.from, to: m.to, text: "[decryption failed]", time: m.createdAt, ok: false };
+      }
+    }));
+    renderChatMessages(messages);
+    setChatStatus(messages.length ? `${messages.length} message(s)` : "No messages yet");
+  } catch (err) {
+    setChatStatus(err.message, true);
+  }
+}
+
+async function chatSend() {
+  if (!task1Token || !task1Username) { setChatStatus("Sign in via the secure server first", true); return; }
+  const toVal = document.getElementById("chatRecipient")?.value.trim();
+  const msgVal = document.getElementById("chatInput")?.value.trim();
+  if (!toVal || !msgVal) { setChatStatus("Enter a recipient and a message", true); return; }
+  setChatStatus("Encrypting and sending…");
+  try {
+    const identity = await getOrCreateE2eeIdentity(task1Username);
+    const pubRes = await fetch(`${getTask1BaseUrl()}/public-keys?username=${encodeURIComponent(toVal)}`);
+    const pubData = await pubRes.json();
+    if (!pubRes.ok) throw new Error(pubData.error || `HTTP ${pubRes.status}`);
+    const envelope = await e2eeEncrypt(identity, pubData.keys.e2eePublicKey, msgVal);
+    const sendRes = await fetch(`${getTask1BaseUrl()}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${task1Token}` },
+      body: JSON.stringify({ to: toVal, envelope }),
+    });
+    const sendData = await sendRes.json();
+    if (!sendRes.ok) throw new Error(sendData.error || `HTTP ${sendRes.status}`);
+    const input = document.getElementById("chatInput");
+    if (input) input.value = "";
+    setChatStatus("Sent (E2EE encrypted)");
+    await chatLoadInbox();
+  } catch (err) {
+    setChatStatus(err.message, true);
+  }
+}
 
 function isLocalSchedule() {
   return currentTimetableId === LOCAL_SCHEDULE_ID;
@@ -963,6 +1147,11 @@ async function signOut() {
     realtimeChannel = null;
   }
   await supabase.auth.signOut();
+  task1Token = "";
+  task1Username = "";
+  localStorage.removeItem("wemeet_task1_token");
+  localStorage.removeItem("wemeet_task1_username");
+  updateChatSection();
   if (currentTimetableId) {
     currentTimetableId = "";
     localStorage.removeItem(STORAGE_KEYS.timetableId);
@@ -1069,10 +1258,11 @@ async function task1Register() {
     return;
   }
   try {
+    const identity = await getOrCreateE2eeIdentity(username);
     const res = await fetch(`${getTask1BaseUrl()}/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password: code }),
+      body: JSON.stringify({ username, password: code, e2eePublicKey: identity.e2eePublPem, signingPublicKey: identity.sigPublPem }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -1109,6 +1299,12 @@ async function task1Login() {
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
 
     localStorage.setItem(STORAGE_KEYS.lastUsername, username);
+    task1Token = data.token || "";
+    task1Username = username;
+    localStorage.setItem("wemeet_task1_token", task1Token);
+    localStorage.setItem("wemeet_task1_username", task1Username);
+    updateChatSection();
+    getOrCreateE2eeIdentity(username);
 
     if (data.supabaseSession?.access_token) {
       const { data: sessionData, error } = await supabase.auth.setSession({
@@ -1349,8 +1545,15 @@ function consumeAuthErrorFromUrl() {
   }
 }
 
+document.getElementById("chatSendBtn")?.addEventListener("click", chatSend);
+document.getElementById("chatRefreshBtn")?.addEventListener("click", chatLoadInbox);
+document.getElementById("chatInput")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") chatSend();
+});
+
 loadConfigInputs();
 consumeAuthErrorFromUrl();
 (async () => {
   await initSupabase();
+  updateChatSection();
 })();

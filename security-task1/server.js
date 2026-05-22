@@ -257,7 +257,7 @@ async function handleLogin(req, res) {
     return;
   }
 
-  const computedHash = hashPassword(password, user.password_salt_b64);
+   const computedHash = hashPassword(password, user.password_salt_b64);
   const valid =
     computedHash.length === String(user.password_hash_b64).length &&
     crypto.timingSafeEqual(Buffer.from(computedHash), Buffer.from(String(user.password_hash_b64)));

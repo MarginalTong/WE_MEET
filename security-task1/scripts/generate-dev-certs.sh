@@ -33,3 +33,4 @@ openssl x509 -req -in "$CERT_DIR/server.csr" -CA "$CERT_DIR/ca.crt" -CAkey "$CER
 echo
 echo "Done. Server certificate fingerprint (SHA256):"
 openssl x509 -in "$CERT_DIR/server.crt" -noout -fingerprint -sha256
+

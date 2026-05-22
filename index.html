@@ -133,6 +133,21 @@
             </div>
             <div id="slotsResult" class="slots-result"></div>
           </section>
+
+          <section class="card card--elevated meet-section" id="chatSection" hidden>
+            <h2 class="meet-section__title">E2EE Chat</h2>
+            <p class="meet-section__sub">Messages are end-to-end encrypted — the server only stores ciphertext.</p>
+            <div id="chatMessages" class="chat-messages"></div>
+            <div class="chat-compose">
+              <input id="chatRecipient" type="text" placeholder="Recipient username" class="chat-input chat-input--recipient" autocomplete="off" />
+              <div class="chat-input-row">
+                <input id="chatInput" type="text" placeholder="Type a message…" class="chat-input chat-input--msg" autocomplete="off" />
+                <button id="chatSendBtn" class="btn btn-accent btn--sm" type="button">Send</button>
+              </div>
+            </div>
+            <button id="chatRefreshBtn" class="btn btn-secondary btn--sm" type="button">Refresh inbox</button>
+            <p id="chatStatus" class="status status-inline"></p>
+          </section>
         </div>
       </div>
     </div>

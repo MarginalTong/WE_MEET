@@ -890,6 +890,100 @@ button {
   color: var(--muted);
 }
 
+/* —— E2EE Chat —— */
+.meet-section__sub {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin: -8px 0 14px;
+}
+
+.chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  margin-bottom: 14px;
+}
+
+.chat-empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 18px 0;
+}
+
+.chat-msg {
+  background: var(--surface-1);
+  border-radius: 8px;
+  padding: 8px 38px 8px 12px;
+  position: relative;
+}
+
+.chat-msg__meta {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+
+.chat-msg__lock {
+  position: absolute;
+  right: 10px;
+  top: 8px;
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
+
+.chat-msg__text {
+  margin: 0;
+  font-size: 0.9rem;
+  word-break: break-word;
+}
+
+.chat-msg--error .chat-msg__text {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.chat-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.chat-input {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.88rem;
+  background: var(--surface-0);
+  color: var(--ink);
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.chat-input--recipient {
+  max-width: 220px;
+}
+
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-input-row .chat-input {
+  flex: 1;
+  width: auto;
+}
+
 /* —— Responsive —— */
 @media (max-width: 880px) {
   .app-shell {
